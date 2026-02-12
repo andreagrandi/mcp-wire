@@ -2,7 +2,9 @@ package target
 
 import "strings"
 
-var knownTargets = []Target{}
+var knownTargets = []Target{
+	NewClaudeCodeTarget(),
+}
 
 // AllTargets returns all known targets.
 func AllTargets() []Target {
