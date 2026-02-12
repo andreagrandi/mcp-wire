@@ -4,6 +4,7 @@ import "strings"
 
 var knownTargets = []Target{
 	NewClaudeCodeTarget(),
+	NewCodexTarget(),
 }
 
 // AllTargets returns all known targets.
