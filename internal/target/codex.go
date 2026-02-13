@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,6 +24,7 @@ const (
 type CodexTarget struct {
 	configPath string
 	lookPath   func(file string) (string, error)
+	runCommand func(name string, args ...string) *exec.Cmd
 }
 
 // NewCodexTarget returns a target instance for Codex CLI.
@@ -30,6 +32,7 @@ func NewCodexTarget() *CodexTarget {
 	return &CodexTarget{
 		configPath: defaultCodexConfigPath(),
 		lookPath:   exec.LookPath,
+		runCommand: exec.Command,
 	}
 }
 
@@ -134,6 +137,41 @@ func (t *CodexTarget) List() ([]string, error) {
 	sort.Strings(services)
 
 	return services, nil
+}
+
+// Authenticate runs Codex OAuth login for a configured MCP server.
+func (t *CodexTarget) Authenticate(serviceName string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	trimmedServiceName := strings.TrimSpace(serviceName)
+	if trimmedServiceName == "" {
+		return errors.New("service name is required")
+	}
+
+	binaryPath, err := t.lookPath(codexBinaryName)
+	if err != nil {
+		return fmt.Errorf("resolve codex binary: %w", err)
+	}
+
+	runner := t.runCommand
+	if runner == nil {
+		runner = exec.Command
+	}
+
+	command := runner(binaryPath, "mcp", "login", trimmedServiceName)
+	if stdin != nil {
+		command.Stdin = stdin
+	}
+	if stdout != nil {
+		command.Stdout = stdout
+	}
+	if stderr != nil {
+		command.Stderr = stderr
+	}
+
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("run codex mcp login for %q: %w", trimmedServiceName, err)
+	}
+
+	return nil
 }
 
 func (t *CodexTarget) readConfig() (map[string]any, bool, error) {

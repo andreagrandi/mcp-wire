@@ -3,12 +3,14 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/andreagrandi/mcp-wire/internal/credential"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
+	"github.com/spf13/cobra"
 )
 
 type fakeInstallTarget struct {
@@ -19,6 +21,13 @@ type fakeInstallTarget struct {
 	installCalls int
 	lastService  service.Service
 	lastEnv      map[string]string
+}
+
+type fakeAuthInstallTarget struct {
+	*fakeInstallTarget
+	authErr         error
+	authCalls       int
+	lastAuthService string
 }
 
 func (t *fakeInstallTarget) Name() string {
@@ -46,6 +55,12 @@ func (t *fakeInstallTarget) Uninstall(_ string) error {
 
 func (t *fakeInstallTarget) List() ([]string, error) {
 	return nil, nil
+}
+
+func (t *fakeAuthInstallTarget) Authenticate(serviceName string, _ io.Reader, _ io.Writer, _ io.Writer) error {
+	t.authCalls++
+	t.lastAuthService = serviceName
+	return t.authErr
 }
 
 type testCredentialSource struct {
@@ -449,6 +464,151 @@ func TestInstallCommandDoesNotPrintNativeOAuthHintForContext7(t *testing.T) {
 	}
 }
 
+func TestInstallCommandAutomaticallyAuthenticatesOAuthService(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	authTarget := &fakeAuthInstallTarget{
+		fakeInstallTarget: &fakeInstallTarget{name: "Codex CLI", slug: "codex", installed: true},
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"context7": {
+				Name:      "context7",
+				Transport: "sse",
+				Auth:      "oauth",
+				URL:       "https://mcp.context7.com/mcp/oauth",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "codex" {
+			return authTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
+
+	output, err := executeInstallCommand(t, "context7", "--target", "codex", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected OAuth install to succeed: %v", err)
+	}
+
+	if authTarget.installCalls != 1 {
+		t.Fatalf("expected install to run once, got %d", authTarget.installCalls)
+	}
+
+	if authTarget.authCalls != 1 {
+		t.Fatalf("expected authentication to run once, got %d", authTarget.authCalls)
+	}
+
+	if authTarget.lastAuthService != "context7" {
+		t.Fatalf("expected auth service context7, got %q", authTarget.lastAuthService)
+	}
+
+	if !strings.Contains(output, "Codex CLI: authenticated") {
+		t.Fatalf("expected authenticated output, got %q", output)
+	}
+}
+
+func TestInstallCommandReturnsErrorWhenOAuthAuthenticationFails(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	authTarget := &fakeAuthInstallTarget{
+		fakeInstallTarget: &fakeInstallTarget{name: "Codex CLI", slug: "codex", installed: true},
+		authErr:           errors.New("oauth cancelled"),
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"jira": {
+				Name:      "jira",
+				Transport: "sse",
+				Auth:      "oauth",
+				URL:       "https://mcp.atlassian.com/v1/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "codex" {
+			return authTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
+
+	output, err := executeInstallCommand(t, "jira", "--target", "codex", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail when OAuth authentication fails")
+	}
+
+	if authTarget.installCalls != 1 {
+		t.Fatalf("expected install to run once, got %d", authTarget.installCalls)
+	}
+
+	if authTarget.authCalls != 1 {
+		t.Fatalf("expected authentication to run once, got %d", authTarget.authCalls)
+	}
+
+	if !strings.Contains(err.Error(), "failed OAuth authentication") {
+		t.Fatalf("expected OAuth authentication error, got %v", err)
+	}
+
+	if !strings.Contains(output, "Codex CLI: authentication failed") {
+		t.Fatalf("expected authentication failure output, got %q", output)
+	}
+}
+
+func TestInstallCommandSkipsOAuthAuthenticationForNonOAuthService(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	authTarget := &fakeAuthInstallTarget{
+		fakeInstallTarget: &fakeInstallTarget{name: "Codex CLI", slug: "codex", installed: true},
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"docs": {
+				Name:      "docs",
+				Transport: "sse",
+				URL:       "https://docs.example.com/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "codex" {
+			return authTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
+
+	output, err := executeInstallCommand(t, "docs", "--target", "codex", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected non-OAuth install to succeed: %v", err)
+	}
+
+	if authTarget.authCalls != 0 {
+		t.Fatalf("expected no authentication for non-OAuth service, got %d", authTarget.authCalls)
+	}
+
+	if strings.Contains(output, "starting OAuth authentication") {
+		t.Fatalf("did not expect OAuth authentication output, got %q", output)
+	}
+}
+
 func overrideInstallCommandDependencies(t *testing.T) func() {
 	t.Helper()
 
@@ -459,6 +619,7 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 	originalNewCredentialFileSource := newCredentialFileSource
 	originalNewCredentialResolver := newCredentialResolver
 	originalAllTargets := allTargets
+	originalShouldAutoAuthenticate := shouldAutoAuthenticate
 
 	return func() {
 		loadServices = originalLoadServices
@@ -468,6 +629,7 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 		newCredentialFileSource = originalNewCredentialFileSource
 		newCredentialResolver = originalNewCredentialResolver
 		allTargets = originalAllTargets
+		shouldAutoAuthenticate = originalShouldAutoAuthenticate
 	}
 }
 

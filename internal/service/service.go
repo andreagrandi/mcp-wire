@@ -5,6 +5,7 @@ type Service struct {
 	Name        string   `yaml:"name"`
 	Description string   `yaml:"description"`
 	Transport   string   `yaml:"transport"` // "sse" or "stdio"
+	Auth        string   `yaml:"auth,omitempty"`
 	URL         string   `yaml:"url,omitempty"`
 	Command     string   `yaml:"command,omitempty"`
 	Args        []string `yaml:"args,omitempty"`

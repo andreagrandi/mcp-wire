@@ -1,5 +1,6 @@
 name: sentry
 description: "Sentry MCP server (OAuth)"
 transport: sse
+auth: oauth
 url: "https://mcp.sentry.dev/mcp"
 env: []

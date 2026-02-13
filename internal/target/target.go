@@ -1,6 +1,10 @@
 package target
 
-import "github.com/andreagrandi/mcp-wire/internal/service"
+import (
+	"io"
+
+	"github.com/andreagrandi/mcp-wire/internal/service"
+)
 
 // Target defines how a CLI integration manages MCP services.
 type Target interface {
@@ -22,4 +26,9 @@ type Target interface {
 
 	// List returns the names of currently configured services.
 	List() ([]string, error)
+}
+
+// AuthTarget can perform an interactive authentication flow for a configured service.
+type AuthTarget interface {
+	Authenticate(serviceName string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 }

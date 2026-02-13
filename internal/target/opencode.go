@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,7 @@ type OpenCodeTarget struct {
 	configPath          string
 	lookPath            func(file string) (string, error)
 	statPath            func(name string) (os.FileInfo, error)
+	runCommand          func(name string, args ...string) *exec.Cmd
 	binaryNames         []string
 	fallbackBinaryPaths []string
 }
@@ -35,6 +37,7 @@ func NewOpenCodeTarget() *OpenCodeTarget {
 		configPath:          defaultOpenCodeConfigPath(),
 		lookPath:            exec.LookPath,
 		statPath:            os.Stat,
+		runCommand:          exec.Command,
 		binaryNames:         []string{openCodeBinaryName},
 		fallbackBinaryPaths: defaultOpenCodeFallbackBinaryPaths(),
 	}
@@ -163,6 +166,41 @@ func (t *OpenCodeTarget) List() ([]string, error) {
 	return services, nil
 }
 
+// Authenticate runs OpenCode OAuth auth for a configured MCP server.
+func (t *OpenCodeTarget) Authenticate(serviceName string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error {
+	trimmedServiceName := strings.TrimSpace(serviceName)
+	if trimmedServiceName == "" {
+		return errors.New("service name is required")
+	}
+
+	binaryPath, err := t.resolveOpenCodeBinaryPath()
+	if err != nil {
+		return err
+	}
+
+	runner := t.runCommand
+	if runner == nil {
+		runner = exec.Command
+	}
+
+	command := runner(binaryPath, "mcp", "auth", trimmedServiceName)
+	if stdin != nil {
+		command.Stdin = stdin
+	}
+	if stdout != nil {
+		command.Stdout = stdout
+	}
+	if stderr != nil {
+		command.Stderr = stderr
+	}
+
+	if err := command.Run(); err != nil {
+		return fmt.Errorf("run opencode mcp auth for %q: %w", trimmedServiceName, err)
+	}
+
+	return nil
+}
+
 func (t *OpenCodeTarget) readConfig() (map[string]any, bool, error) {
 	data, err := os.ReadFile(t.configPath)
 	if err != nil {
@@ -248,6 +286,37 @@ func defaultOpenCodeFallbackBinaryPaths() []string {
 		filepath.Join(homeDir, ".opencode", "bin", "opencode"),
 		filepath.Join(homeDir, ".opencode", "bin", "opencode.exe"),
 	}
+}
+
+func (t *OpenCodeTarget) resolveOpenCodeBinaryPath() (string, error) {
+	binaryNames := t.binaryNames
+	if len(binaryNames) == 0 {
+		binaryNames = []string{openCodeBinaryName}
+	}
+
+	for _, binaryName := range binaryNames {
+		trimmedBinaryName := strings.TrimSpace(binaryName)
+		if trimmedBinaryName == "" {
+			continue
+		}
+
+		binaryPath, err := t.lookPath(trimmedBinaryName)
+		if err != nil {
+			continue
+		}
+
+		return binaryPath, nil
+	}
+
+	for _, fallbackPath := range t.fallbackBinaryPaths {
+		if !isExecutableFilePath(fallbackPath, t.statPath) {
+			continue
+		}
+
+		return fallbackPath, nil
+	}
+
+	return "", errors.New("resolve opencode binary: executable not found")
 }
 
 func getOpenCodeMCPEntries(config map[string]any, createIfMissing bool) (map[string]any, error) {

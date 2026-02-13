@@ -203,6 +203,7 @@ func normalizeService(s Service) Service {
 	s.Name = strings.TrimSpace(s.Name)
 	s.Description = strings.TrimSpace(s.Description)
 	s.Transport = strings.ToLower(strings.TrimSpace(s.Transport))
+	s.Auth = strings.ToLower(strings.TrimSpace(s.Auth))
 	s.URL = strings.TrimSpace(s.URL)
 	s.Command = strings.TrimSpace(s.Command)
 

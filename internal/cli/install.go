@@ -21,6 +21,9 @@ var newCredentialFileSource = func(path string) credential.Source { return crede
 var newCredentialResolver = func(sources ...credential.Source) *credential.Resolver {
 	return credential.NewResolver(sources...)
 }
+var shouldAutoAuthenticate = func(cmd *cobra.Command) bool {
+	return canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout())
+}
 
 func init() {
 	rootCmd.AddCommand(newInstallCmd())
@@ -171,8 +174,10 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 	}
 
 	printInstallPlan(cmd.OutOrStdout(), targetDefinitions)
+	autoAuthenticate := shouldAutoAuthenticate(cmd) && serviceUsesOAuth(svc)
 
 	installErrors := make([]error, 0)
+	authenticationErrors := make([]error, 0)
 	for _, targetDefinition := range targetDefinitions {
 		err := targetDefinition.Install(svc, resolvedEnv)
 		if err != nil {
@@ -182,11 +187,53 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 		}
 
 		fmt.Fprintf(cmd.OutOrStdout(), "  %s: configured\n", targetDefinition.Name())
+
+		if !autoAuthenticate {
+			continue
+		}
+
+		authTarget, supportsAuth := targetDefinition.(target.AuthTarget)
+		if !supportsAuth {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s: authentication skipped (automatic OAuth is not supported by this target)\n", targetDefinition.Name())
+			continue
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s: starting OAuth authentication...\n", targetDefinition.Name())
+		err = authTarget.Authenticate(svc.Name, cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr())
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s: authentication failed (%v)\n", targetDefinition.Name(), err)
+			authenticationErrors = append(authenticationErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
+			continue
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s: authenticated\n", targetDefinition.Name())
 	}
 
 	if len(installErrors) > 0 {
 		return fmt.Errorf("failed to install service %q on one or more targets: %w", svc.Name, errors.Join(installErrors...))
 	}
 
+	if len(authenticationErrors) > 0 {
+		return fmt.Errorf("configured service %q but failed OAuth authentication on one or more targets: %w", svc.Name, errors.Join(authenticationErrors...))
+	}
+
 	return nil
+}
+
+func serviceUsesOAuth(svc service.Service) bool {
+	authType := strings.ToLower(strings.TrimSpace(svc.Auth))
+	if authType != "" {
+		return authType == "oauth"
+	}
+
+	if strings.ToLower(strings.TrimSpace(svc.Transport)) != "sse" {
+		return false
+	}
+
+	if strings.Contains(strings.ToLower(svc.Description), "oauth") {
+		return true
+	}
+
+	url := strings.ToLower(strings.TrimSpace(svc.URL))
+	return strings.Contains(url, "/mcp/oauth")
 }
