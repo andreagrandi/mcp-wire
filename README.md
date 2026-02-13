@@ -1,6 +1,6 @@
 # mcp-wire
 
-![mcp-wire logo](mcp-wire-logo.png)
+<img src="mcp-wire-logo.png" alt="mcp-wire logo" width="50%" />
 
 mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) servers across multiple AI coding tools from one interface.
 
