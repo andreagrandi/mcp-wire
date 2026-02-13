@@ -181,6 +181,37 @@ func TestResolveServicePathsWithoutHomeDirectory(t *testing.T) {
 	}
 }
 
+func TestLoadServicesLoadsEmbeddedDefaultsWhenPathsAreMissing(t *testing.T) {
+	originalWorkingDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current working directory: %v", err)
+	}
+
+	isolatedDirectory := t.TempDir()
+	if err := os.Chdir(isolatedDirectory); err != nil {
+		t.Fatalf("failed to change working directory: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(originalWorkingDirectory); err != nil {
+			t.Fatalf("failed to restore working directory: %v", err)
+		}
+	})
+
+	t.Setenv("HOME", isolatedDirectory)
+	t.Setenv("USERPROFILE", isolatedDirectory)
+
+	services, err := LoadServices()
+	if err != nil {
+		t.Fatalf("expected embedded services to load: %v", err)
+	}
+
+	for _, name := range []string{"jira", "sentry", "context7"} {
+		if _, ok := services[name]; !ok {
+			t.Fatalf("expected service %q to be available from embedded defaults", name)
+		}
+	}
+}
+
 func writeTestFile(t *testing.T, path string, content string) {
 	t.Helper()
 

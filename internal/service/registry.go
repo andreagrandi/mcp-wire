@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	bundledservices "github.com/andreagrandi/mcp-wire/services"
 	"gopkg.in/yaml.v3"
 )
 
@@ -21,12 +22,19 @@ import (
 // wins. With default paths, this means user-local definitions override bundled
 // ones.
 func LoadServices(paths ...string) (map[string]Service, error) {
+	loadBundledDefaults := len(paths) == 0
+
 	loadPaths, err := resolveServicePaths(paths...)
 	if err != nil {
 		return nil, err
 	}
 
 	services := make(map[string]Service)
+	if loadBundledDefaults {
+		if err := loadEmbeddedServices(services); err != nil {
+			return nil, err
+		}
+	}
 
 	for _, rawPath := range loadPaths {
 		path, err := expandHome(rawPath)
@@ -143,6 +151,39 @@ func loadServiceFile(path string) (Service, error) {
 	if err != nil {
 		return Service{}, fmt.Errorf("read service file %q: %w", path, err)
 	}
+
+	return parseServiceDefinition(path, data)
+}
+
+func loadEmbeddedServices(services map[string]Service) error {
+	entries, err := bundledservices.FS.ReadDir(".")
+	if err != nil {
+		return fmt.Errorf("read embedded services: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
+			continue
+		}
+
+		filePath := entry.Name()
+		data, err := bundledservices.FS.ReadFile(filePath)
+		if err != nil {
+			return fmt.Errorf("read embedded service file %q: %w", filePath, err)
+		}
+
+		service, err := parseServiceDefinition("embedded/"+filePath, data)
+		if err != nil {
+			return err
+		}
+
+		services[service.Name] = service
+	}
+
+	return nil
+}
+
+func parseServiceDefinition(path string, data []byte) (Service, error) {
 
 	var service Service
 	if err := yaml.Unmarshal(data, &service); err != nil {
