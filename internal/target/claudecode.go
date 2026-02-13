@@ -147,23 +147,7 @@ func (t *ClaudeCodeTarget) List() ([]string, error) {
 		return []string{}, nil
 	}
 
-	mcpServers, err := getMCPServers(config, false)
-	if err != nil {
-		return nil, err
-	}
-
-	if mcpServers == nil {
-		return []string{}, nil
-	}
-
-	services := make([]string, 0, len(mcpServers))
-	for serviceName := range mcpServers {
-		services = append(services, serviceName)
-	}
-
-	sort.Strings(services)
-
-	return services, nil
+	return collectClaudeMCPServerNames(config)
 }
 
 func (t *ClaudeCodeTarget) readConfig() (map[string]any, bool, error) {
@@ -211,10 +195,28 @@ func (t *ClaudeCodeTarget) writeConfig(config map[string]any) error {
 func defaultClaudeCodeConfigPath() string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return filepath.Join(".claude", "settings.json")
+		return ".claude.json"
 	}
 
-	return filepath.Join(homeDir, ".claude", "settings.json")
+	candidates := []string{
+		filepath.Join(homeDir, ".claude.json"),
+		filepath.Join(homeDir, ".claude", "settings.json"),
+	}
+
+	for _, candidatePath := range candidates {
+		info, err := os.Stat(candidatePath)
+		if err != nil {
+			continue
+		}
+
+		if info.IsDir() {
+			continue
+		}
+
+		return candidatePath
+	}
+
+	return candidates[0]
 }
 
 func defaultClaudeCodeFallbackBinaryPaths() []string {
@@ -259,6 +261,15 @@ func isExecutableFilePath(path string, statPath func(name string) (os.FileInfo, 
 }
 
 func getMCPServers(config map[string]any, createIfMissing bool) (map[string]any, error) {
+	projectMCPServers, err := getClaudeProjectMCPServers(config, createIfMissing)
+	if err != nil {
+		return nil, err
+	}
+
+	if projectMCPServers != nil {
+		return projectMCPServers, nil
+	}
+
 	rawMCPServers, exists := config["mcpServers"]
 	if !exists || rawMCPServers == nil {
 		if !createIfMissing {
@@ -277,6 +288,219 @@ func getMCPServers(config map[string]any, createIfMissing bool) (map[string]any,
 	}
 
 	return mcpServers, nil
+}
+
+func collectClaudeMCPServerNames(config map[string]any) ([]string, error) {
+	serviceNames := make(map[string]struct{})
+
+	if err := collectClaudeMCPServerNamesFromScope(config, serviceNames, "mcpServers"); err != nil {
+		return nil, err
+	}
+
+	rawProjects, hasProjects := config["projects"]
+	if hasProjects && rawProjects != nil {
+		projects, ok := rawProjects.(map[string]any)
+		if !ok {
+			return nil, errors.New("invalid config: projects must be an object")
+		}
+
+		for projectKey, rawProjectConfig := range projects {
+			projectConfig, ok := rawProjectConfig.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("invalid config: projects[%q] must be an object", projectKey)
+			}
+
+			if err := collectClaudeMCPServerNamesFromScope(projectConfig, serviceNames, fmt.Sprintf("projects[%q].mcpServers", projectKey)); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	services := make([]string, 0, len(serviceNames))
+	for serviceName := range serviceNames {
+		services = append(services, serviceName)
+	}
+
+	sort.Strings(services)
+
+	return services, nil
+}
+
+func collectClaudeMCPServerNamesFromScope(scope map[string]any, serviceNames map[string]struct{}, label string) error {
+	rawMCPServers, exists := scope["mcpServers"]
+	if !exists || rawMCPServers == nil {
+		return nil
+	}
+
+	mcpServers, ok := rawMCPServers.(map[string]any)
+	if !ok {
+		return fmt.Errorf("invalid config: %s must be an object", label)
+	}
+
+	for serviceName := range mcpServers {
+		trimmedName := strings.TrimSpace(serviceName)
+		if trimmedName == "" {
+			continue
+		}
+
+		serviceNames[trimmedName] = struct{}{}
+	}
+
+	return nil
+}
+
+func getClaudeProjectMCPServers(config map[string]any, createIfMissing bool) (map[string]any, error) {
+	rawProjects, hasProjects := config["projects"]
+	if !hasProjects || rawProjects == nil {
+		return nil, nil
+	}
+
+	projects, ok := rawProjects.(map[string]any)
+	if !ok {
+		return nil, errors.New("invalid config: projects must be an object")
+	}
+
+	projectKey, err := resolveClaudeProjectKey(projects, createIfMissing)
+	if err != nil {
+		return nil, err
+	}
+
+	if projectKey == "" {
+		return nil, nil
+	}
+
+	rawProjectConfig, exists := projects[projectKey]
+	if !exists || rawProjectConfig == nil {
+		if !createIfMissing {
+			return nil, nil
+		}
+
+		projectConfig := map[string]any{}
+		projects[projectKey] = projectConfig
+		rawProjectConfig = projectConfig
+	}
+
+	projectConfig, ok := rawProjectConfig.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid config: projects[%q] must be an object", projectKey)
+	}
+
+	rawMCPServers, exists := projectConfig["mcpServers"]
+	if !exists || rawMCPServers == nil {
+		if !createIfMissing {
+			return nil, nil
+		}
+
+		mcpServers := map[string]any{}
+		projectConfig["mcpServers"] = mcpServers
+		return mcpServers, nil
+	}
+
+	mcpServers, ok := rawMCPServers.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("invalid config: projects[%q].mcpServers must be an object", projectKey)
+	}
+
+	return mcpServers, nil
+}
+
+func resolveClaudeProjectKey(projects map[string]any, createIfMissing bool) (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		if createIfMissing {
+			return "", fmt.Errorf("resolve current working directory: %w", err)
+		}
+
+		return "", nil
+	}
+
+	currentDirectory := normalizePathForMatch(cwd)
+
+	bestKey := ""
+	bestLength := -1
+
+	for key := range projects {
+		trimmedKey := strings.TrimSpace(key)
+		if trimmedKey == "" {
+			continue
+		}
+
+		projectPath := normalizePathForMatch(trimmedKey)
+		if projectPath == "" {
+			continue
+		}
+
+		if currentDirectory == projectPath {
+			return key, nil
+		}
+
+		if !isPathAtOrWithin(currentDirectory, projectPath) {
+			continue
+		}
+
+		if len(projectPath) <= bestLength {
+			continue
+		}
+
+		bestKey = key
+		bestLength = len(projectPath)
+	}
+
+	if bestKey != "" {
+		return bestKey, nil
+	}
+
+	if !createIfMissing {
+		return "", nil
+	}
+
+	cwdPath, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("resolve current working directory: %w", err)
+	}
+
+	currentWorkingDirectory := filepath.Clean(cwdPath)
+	if _, exists := projects[currentWorkingDirectory]; !exists {
+		projects[currentWorkingDirectory] = map[string]any{}
+	}
+
+	return currentWorkingDirectory, nil
+}
+
+func normalizePathForMatch(path string) string {
+	cleanPath := filepath.Clean(path)
+	if cleanPath == "" {
+		return cleanPath
+	}
+
+	absPath, err := filepath.Abs(cleanPath)
+	if err == nil {
+		cleanPath = absPath
+	}
+
+	resolvedPath, err := filepath.EvalSymlinks(cleanPath)
+	if err == nil {
+		cleanPath = resolvedPath
+	}
+
+	return filepath.Clean(cleanPath)
+}
+
+func isPathAtOrWithin(path string, parent string) bool {
+	relativePath, err := filepath.Rel(parent, path)
+	if err != nil {
+		return false
+	}
+
+	if relativePath == "." {
+		return true
+	}
+
+	if relativePath == ".." {
+		return false
+	}
+
+	return !strings.HasPrefix(relativePath, ".."+string(os.PathSeparator))
 }
 
 func buildClaudeCodeServerConfig(svc service.Service, resolvedEnv map[string]string) (map[string]any, error) {

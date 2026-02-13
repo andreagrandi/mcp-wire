@@ -349,6 +349,41 @@ func TestOpenCodeTargetCanReadJSONCConfig(t *testing.T) {
 	}
 }
 
+func TestOpenCodeTargetCanReadJSONStyleConfigWithJSONCFeatures(t *testing.T) {
+	target := newTestOpenCodeTarget(t)
+	target.configPath = filepath.Join(t.TempDir(), ".config", "opencode", "opencode.json")
+
+	configDir := filepath.Dir(target.configPath)
+	err := os.MkdirAll(configDir, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create config directory: %v", err)
+	}
+
+	jsonWithCommentsAndTrailingCommas := `{
+  // OpenCode allows comments and trailing commas
+  "mcp": {
+    "service-a": {
+      "type": "remote",
+      "url": "https://example.com/mcp",
+    },
+  },
+}`
+
+	err = os.WriteFile(target.configPath, []byte(jsonWithCommentsAndTrailingCommas), 0o600)
+	if err != nil {
+		t.Fatalf("failed to write config file: %v", err)
+	}
+
+	services, err := target.List()
+	if err != nil {
+		t.Fatalf("expected list to succeed for json file with JSONC features: %v", err)
+	}
+
+	if len(services) != 1 || services[0] != "service-a" {
+		t.Fatalf("expected service-a from json file with JSONC features, got %#v", services)
+	}
+}
+
 func TestDefaultOpenCodeConfigPathPrefersExistingConfigFile(t *testing.T) {
 	originalHome := os.Getenv("HOME")
 	t.Cleanup(func() {

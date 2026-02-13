@@ -1,4 +1,4 @@
-.PHONY: build test clean fmt vet lint
+.PHONY: build test test-integration clean fmt vet lint
 
 # Build the binary
 build:
@@ -8,6 +8,10 @@ build:
 # Run tests
 test:
 	go test ./...
+
+# Run integration tests (opt-in)
+test-integration:
+	go test -tags=integration ./internal/integration/...
 
 # Run tests with verbose output
 test-verbose:
@@ -48,6 +52,7 @@ help:
 	@echo "Available targets:"
 	@echo "  build        - Build the binary"
 	@echo "  test         - Run tests"
+	@echo "  test-integration - Run integration tests"
 	@echo "  test-verbose - Run tests with verbose output"
 	@echo "  fmt          - Format code"
 	@echo "  vet          - Run static analysis"

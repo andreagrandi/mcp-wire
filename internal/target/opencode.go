@@ -178,9 +178,9 @@ func (t *OpenCodeTarget) readConfig() (map[string]any, bool, error) {
 		return config, true, nil
 	}
 
-	if strings.EqualFold(filepath.Ext(t.configPath), ".jsonc") {
-		data = jsonc.ToJSON(data)
-	}
+	// OpenCode supports both JSON and JSONC-style content (comments/trailing commas)
+	// in user config files, including files named with a .json extension.
+	data = jsonc.ToJSON(data)
 
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, true, fmt.Errorf("parse config file %q: %w", t.configPath, err)

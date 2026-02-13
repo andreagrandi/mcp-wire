@@ -14,6 +14,7 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 - Target implementation for Claude Code in `internal/target/claudecode.go`
 - Target implementation for Codex CLI in `internal/target/codex.go`
 - Target implementation for OpenCode in `internal/target/opencode.go`
+- Integration test suite in `internal/integration/cli_integration_test.go` (build tag: `integration`)
 - Credential resolution foundation in `internal/credential/`:
   - resolver chain (`resolver.go`)
   - environment source (`env.go`)
@@ -50,11 +51,14 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 - `status` prints a service × target matrix for installed targets
 - `uninstall` can optionally remove matching stored credentials for the selected service (interactive terminals)
 - OpenCode target supports `~/.config/opencode/opencode.json` and `~/.config/opencode/opencode.jsonc` MCP configuration
+- OpenCode config parsing supports JSONC-style content (comments and trailing commas) in both `.json` and `.jsonc` files
+- Claude Code target supports both `~/.claude.json` and `~/.claude/settings.json`, and status includes project-scoped MCP entries
 
 ## Run locally
 
 ```bash
 make test
+make test-integration
 make build
 go run ./cmd/mcp-wire list services
 go run ./cmd/mcp-wire list targets

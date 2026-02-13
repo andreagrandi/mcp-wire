@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/andreagrandi/mcp-wire/internal/service"
@@ -316,6 +317,241 @@ func TestClaudeCodeTargetMethodsErrorWhenMCPServersIsNotObject(t *testing.T) {
 	}
 }
 
+func TestClaudeCodeTargetListReadsProjectScopedMCPServers(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
+
+	target := newTestClaudeCodeTarget(t)
+
+	config := map[string]any{
+		"projects": map[string]any{
+			projectRoot: map[string]any{
+				"mcpServers": map[string]any{
+					"service-a": map[string]any{"type": "sse", "url": "https://a.example.com"},
+				},
+			},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, config)
+
+	services, err := target.List()
+	if err != nil {
+		t.Fatalf("expected list to succeed: %v", err)
+	}
+
+	if len(services) != 1 || services[0] != "service-a" {
+		t.Fatalf("expected project scoped service-a, got %#v", services)
+	}
+}
+
+func TestClaudeCodeTargetListReadsNearestParentProjectMCPServers(t *testing.T) {
+	projectRoot := t.TempDir()
+	subDirectory := filepath.Join(projectRoot, "nested", "dir")
+	err := os.MkdirAll(subDirectory, 0o755)
+	if err != nil {
+		t.Fatalf("failed to create subdirectory: %v", err)
+	}
+
+	setWorkingDirectory(t, subDirectory)
+
+	target := newTestClaudeCodeTarget(t)
+
+	config := map[string]any{
+		"projects": map[string]any{
+			projectRoot: map[string]any{
+				"mcpServers": map[string]any{
+					"service-a": map[string]any{"type": "sse", "url": "https://a.example.com"},
+				},
+			},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, config)
+
+	services, err := target.List()
+	if err != nil {
+		t.Fatalf("expected list to succeed: %v", err)
+	}
+
+	if len(services) != 1 || services[0] != "service-a" {
+		t.Fatalf("expected nearest parent project service-a, got %#v", services)
+	}
+}
+
+func TestClaudeCodeTargetListAggregatesTopLevelAndAllProjects(t *testing.T) {
+	setWorkingDirectory(t, t.TempDir())
+
+	target := newTestClaudeCodeTarget(t)
+
+	config := map[string]any{
+		"mcpServers": map[string]any{
+			"global-service": map[string]any{"type": "sse", "url": "https://global.example.com"},
+		},
+		"projects": map[string]any{
+			"/tmp/project-a": map[string]any{
+				"mcpServers": map[string]any{
+					"project-service-a": map[string]any{"type": "sse", "url": "https://a.example.com"},
+				},
+			},
+			"/tmp/project-b": map[string]any{
+				"mcpServers": map[string]any{
+					"project-service-b": map[string]any{"type": "sse", "url": "https://b.example.com"},
+				},
+			},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, config)
+
+	services, err := target.List()
+	if err != nil {
+		t.Fatalf("expected list to succeed: %v", err)
+	}
+
+	if len(services) != 3 {
+		t.Fatalf("expected 3 aggregated services, got %#v", services)
+	}
+
+	expected := []string{"global-service", "project-service-a", "project-service-b"}
+	for i, expectedName := range expected {
+		if services[i] != expectedName {
+			t.Fatalf("expected service %q at index %d, got %#v", expectedName, i, services)
+		}
+	}
+}
+
+func TestClaudeCodeTargetInstallWritesProjectScopedMCPServers(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
+
+	target := newTestClaudeCodeTarget(t)
+
+	initialConfig := map[string]any{
+		"projects": map[string]any{
+			projectRoot: map[string]any{},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, initialConfig)
+
+	svc := service.Service{Name: "service-a", Transport: "sse", URL: "https://a.example.com"}
+	err := target.Install(svc, map[string]string{"TOKEN": "value"})
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	updatedConfig := readTargetConfigFile(t, target.configPath)
+	projects := mustMapValue(t, updatedConfig["projects"], "projects")
+	projectConfig := mustMapValue(t, projects[projectRoot], "projects.<cwd>")
+	mcpServers := mustMapValue(t, projectConfig["mcpServers"], "projects.<cwd>.mcpServers")
+
+	if _, ok := mcpServers["service-a"]; !ok {
+		t.Fatal("expected service-a to be written in project scoped mcpServers")
+	}
+}
+
+func TestClaudeCodeTargetUninstallRemovesProjectScopedService(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
+
+	target := newTestClaudeCodeTarget(t)
+
+	initialConfig := map[string]any{
+		"projects": map[string]any{
+			projectRoot: map[string]any{
+				"mcpServers": map[string]any{
+					"service-a": map[string]any{"type": "sse", "url": "https://a.example.com"},
+					"service-b": map[string]any{"type": "sse", "url": "https://b.example.com"},
+				},
+			},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, initialConfig)
+
+	err := target.Uninstall("service-a")
+	if err != nil {
+		t.Fatalf("expected uninstall to succeed: %v", err)
+	}
+
+	updatedConfig := readTargetConfigFile(t, target.configPath)
+	projects := mustMapValue(t, updatedConfig["projects"], "projects")
+	projectConfig := mustMapValue(t, projects[projectRoot], "projects.<cwd>")
+	mcpServers := mustMapValue(t, projectConfig["mcpServers"], "projects.<cwd>.mcpServers")
+
+	if _, ok := mcpServers["service-a"]; ok {
+		t.Fatal("expected service-a to be removed from project scoped mcpServers")
+	}
+
+	if _, ok := mcpServers["service-b"]; !ok {
+		t.Fatal("expected service-b to remain in project scoped mcpServers")
+	}
+}
+
+func TestDefaultClaudeCodeConfigPathPrefersExistingDotClaudeJSON(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	t.Cleanup(func() {
+		if originalHome == "" {
+			_ = os.Unsetenv("HOME")
+			return
+		}
+
+		_ = os.Setenv("HOME", originalHome)
+	})
+
+	tempHome := t.TempDir()
+	err := os.Setenv("HOME", tempHome)
+	if err != nil {
+		t.Fatalf("failed to set HOME: %v", err)
+	}
+
+	modernPath := filepath.Join(tempHome, ".claude.json")
+	err = os.WriteFile(modernPath, []byte("{}"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to create .claude.json: %v", err)
+	}
+
+	resolvedPath := defaultClaudeCodeConfigPath()
+	if !strings.HasSuffix(resolvedPath, filepath.Join(tempHome, ".claude.json")) {
+		t.Fatalf("expected default path to use .claude.json, got %q", resolvedPath)
+	}
+}
+
+func TestDefaultClaudeCodeConfigPathUsesSettingsWhenOnlySettingsExists(t *testing.T) {
+	originalHome := os.Getenv("HOME")
+	t.Cleanup(func() {
+		if originalHome == "" {
+			_ = os.Unsetenv("HOME")
+			return
+		}
+
+		_ = os.Setenv("HOME", originalHome)
+	})
+
+	tempHome := t.TempDir()
+	err := os.Setenv("HOME", tempHome)
+	if err != nil {
+		t.Fatalf("failed to set HOME: %v", err)
+	}
+
+	settingsPath := filepath.Join(tempHome, ".claude", "settings.json")
+	err = os.MkdirAll(filepath.Dir(settingsPath), 0o755)
+	if err != nil {
+		t.Fatalf("failed to create settings directory: %v", err)
+	}
+
+	err = os.WriteFile(settingsPath, []byte("{}"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to create settings.json: %v", err)
+	}
+
+	resolvedPath := defaultClaudeCodeConfigPath()
+	if !strings.HasSuffix(resolvedPath, filepath.Join(tempHome, ".claude", "settings.json")) {
+		t.Fatalf("expected default path to use settings.json, got %q", resolvedPath)
+	}
+}
+
 func newTestClaudeCodeTarget(t *testing.T) *ClaudeCodeTarget {
 	t.Helper()
 
@@ -330,6 +566,24 @@ func newTestClaudeCodeTarget(t *testing.T) *ClaudeCodeTarget {
 	}
 
 	return target
+}
+
+func setWorkingDirectory(t *testing.T, path string) {
+	t.Helper()
+
+	originalDirectory, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get current directory: %v", err)
+	}
+
+	err = os.Chdir(path)
+	if err != nil {
+		t.Fatalf("failed to change directory to %q: %v", path, err)
+	}
+
+	t.Cleanup(func() {
+		_ = os.Chdir(originalDirectory)
+	})
 }
 
 func writeTargetConfigFile(t *testing.T, configPath string, config map[string]any) {

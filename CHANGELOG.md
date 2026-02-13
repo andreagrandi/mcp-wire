@@ -36,11 +36,16 @@
 - JSONC parsing dependency for OpenCode config compatibility (`github.com/tidwall/jsonc`).
 - Test coverage for install, uninstall, status, and credential cleanup flows.
 - Test coverage for OpenCode target install, uninstall, list, JSONC parsing, and detection behavior.
+- Integration test harness for CLI lifecycle flows (`list`, `install`, `status`, `uninstall`) using a sandboxed environment.
+- `make test-integration` target for opt-in integration tests.
+- Claude config path compatibility for both `~/.claude.json` and `~/.claude/settings.json`.
 
 ### Changed
 - README expanded with implementation status, local run instructions, and next-step roadmap.
 - README updated to reflect interactive credential flow progress.
 - README updated to reflect current CLI command coverage and bundled services.
 - README updated to reflect OpenCode target support.
+- OpenCode config parsing now accepts JSONC-style content in both `.json` and `.jsonc` config files.
+- Claude status discovery now includes both global and project-scoped MCP server entries.
 - Project logo added and refreshed, with scaled rendering in README.
 - Repository development guidance file (`AGENTS.md`) added.
