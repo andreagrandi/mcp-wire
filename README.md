@@ -17,6 +17,12 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
   - resolver chain (`resolver.go`)
   - environment source (`env.go`)
   - file source (`file.go`)
+- Interactive credential prompt helpers in `internal/cli/install_credentials.go`:
+  - required-variable prompting
+  - setup URL + hint display
+  - optional browser open
+  - masked secret input on terminal
+  - optional persistence to file credentials store
 - CI workflow via GitHub Actions
 - Changelog initialized in `CHANGELOG.md`
 - Unit tests for service loading, targets, and credentials
@@ -29,6 +35,7 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 - Claude Code and Codex target implementations can detect installation, install/update entries, uninstall entries, and list configured services
 - Target config writes preserve unknown user-defined keys by using map-based parsing
 - Credential resolution supports environment variables first, then file-based credentials at `~/.config/mcp-wire/credentials` (stored with `0600` permissions)
+- Interactive credential prompts can collect missing required values with optional setup URL opening and optional storage in the credential file store
 
 ## Run locally
 
@@ -41,8 +48,7 @@ go run ./cmd/mcp-wire --help
 
 ## Next steps
 
-- Add interactive credential flow during install (prompt + optional persistence)
 - Add `list`, `install`, `uninstall`, and `status` commands
-- Wire credential resolver into install command logic
+- Wire interactive credential flow and resolver into the install command end-to-end
 - Add initial service definition files under `services/`
 - Add additional target implementations
