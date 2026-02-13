@@ -1,0 +1,390 @@
+package cli
+
+import (
+	"bytes"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/andreagrandi/mcp-wire/internal/credential"
+	"github.com/andreagrandi/mcp-wire/internal/service"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
+)
+
+type fakeInstallTarget struct {
+	name         string
+	slug         string
+	installed    bool
+	installErr   error
+	installCalls int
+	lastService  service.Service
+	lastEnv      map[string]string
+}
+
+func (t *fakeInstallTarget) Name() string {
+	return t.name
+}
+
+func (t *fakeInstallTarget) Slug() string {
+	return t.slug
+}
+
+func (t *fakeInstallTarget) IsInstalled() bool {
+	return t.installed
+}
+
+func (t *fakeInstallTarget) Install(svc service.Service, resolvedEnv map[string]string) error {
+	t.installCalls++
+	t.lastService = svc
+	t.lastEnv = copyStringMap(resolvedEnv)
+	return t.installErr
+}
+
+func (t *fakeInstallTarget) Uninstall(_ string) error {
+	return nil
+}
+
+func (t *fakeInstallTarget) List() ([]string, error) {
+	return nil, nil
+}
+
+type testCredentialSource struct {
+	name   string
+	values map[string]string
+}
+
+func (s *testCredentialSource) Name() string {
+	if s.name == "" {
+		return "test-source"
+	}
+
+	return s.name
+}
+
+func (s *testCredentialSource) Get(envName string) (string, bool) {
+	value, ok := s.values[envName]
+	return value, ok
+}
+
+func (s *testCredentialSource) Store(_ string, _ string) error {
+	return nil
+}
+
+func TestInstallCommandInstallsToAllInstalledTargetsByDefault(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	alpha := &fakeInstallTarget{name: "Alpha CLI", slug: "alpha-cli", installed: true}
+	beta := &fakeInstallTarget{name: "Beta CLI", slug: "beta-cli", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+				Env: []service.EnvVar{
+					{Name: "DEMO_TOKEN", Required: true},
+				},
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target { return []targetpkg.Target{alpha, beta} }
+	lookupTarget = func(slug string) (targetpkg.Target, bool) { return nil, false }
+	newCredentialEnvSource = func() credential.Source {
+		return &testCredentialSource{name: "environment", values: map[string]string{"DEMO_TOKEN": "env-token"}}
+	}
+	newCredentialFileSource = func(string) credential.Source {
+		return &testCredentialSource{name: "file", values: map[string]string{}}
+	}
+
+	output, err := executeInstallCommand(t, "demo-service", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected install command to succeed: %v", err)
+	}
+
+	if alpha.installCalls != 1 || beta.installCalls != 1 {
+		t.Fatalf("expected both targets to be installed once, got alpha=%d beta=%d", alpha.installCalls, beta.installCalls)
+	}
+
+	if alpha.lastEnv["DEMO_TOKEN"] != "env-token" {
+		t.Fatalf("expected resolved env to be passed to alpha target, got %#v", alpha.lastEnv)
+	}
+
+	if !strings.Contains(output, "Installing to: Alpha CLI, Beta CLI") {
+		t.Fatalf("expected install plan output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Alpha CLI: configured") || !strings.Contains(output, "Beta CLI: configured") {
+		t.Fatalf("expected success lines in output, got %q", output)
+	}
+}
+
+func TestInstallCommandUsesSelectedTargets(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	selectedTarget := &fakeInstallTarget{name: "Selected CLI", slug: "selected", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target {
+		t.Fatal("listInstalledTargets should not be called when --target is provided")
+		return nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "selected" {
+			return selectedTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	_, err := executeInstallCommand(t, "demo-service", "--target", "selected", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected install command to succeed: %v", err)
+	}
+
+	if selectedTarget.installCalls != 1 {
+		t.Fatalf("expected selected target to be installed once, got %d", selectedTarget.installCalls)
+	}
+}
+
+func TestInstallCommandReturnsErrorForUnknownTarget(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(string) (targetpkg.Target, bool) { return nil, false }
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	_, err := executeInstallCommand(t, "demo-service", "--target", "unknown", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail for unknown target")
+	}
+
+	if !strings.Contains(err.Error(), "is not known") {
+		t.Fatalf("expected unknown target error, got %v", err)
+	}
+}
+
+func TestInstallCommandReturnsErrorForNotInstalledSelectedTarget(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	notInstalledTarget := &fakeInstallTarget{name: "Offline CLI", slug: "offline", installed: false}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(string) (targetpkg.Target, bool) { return notInstalledTarget, true }
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	_, err := executeInstallCommand(t, "demo-service", "--target", "offline", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail for not installed target")
+	}
+
+	if !strings.Contains(err.Error(), "is not installed") {
+		t.Fatalf("expected not installed target error, got %v", err)
+	}
+}
+
+func TestInstallCommandReturnsErrorWhenNoInstalledTargetsAvailable(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target { return []targetpkg.Target{} }
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	_, err := executeInstallCommand(t, "demo-service", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail when no targets are installed")
+	}
+
+	if !strings.Contains(err.Error(), "no installed targets found") {
+		t.Fatalf("expected missing targets error, got %v", err)
+	}
+}
+
+func TestInstallCommandReturnsErrorWhenServiceIsMissing(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"available-service": {
+				Name:      "available-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target { return []targetpkg.Target{} }
+
+	_, err := executeInstallCommand(t, "missing-service", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail for unknown service")
+	}
+
+	if !strings.Contains(err.Error(), "missing-service") {
+		t.Fatalf("expected missing service name in error, got %v", err)
+	}
+}
+
+func TestInstallCommandReturnsErrorWhenRequiredCredentialIsMissingWithNoPrompt(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	installTarget := &fakeInstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+				Env: []service.EnvVar{
+					{Name: "DEMO_TOKEN", Required: true},
+				},
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target { return []targetpkg.Target{installTarget} }
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	_, err := executeInstallCommand(t, "demo-service", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail when required credential is missing")
+	}
+
+	if !strings.Contains(err.Error(), "DEMO_TOKEN") {
+		t.Fatalf("expected missing credential name in error, got %v", err)
+	}
+
+	if installTarget.installCalls != 0 {
+		t.Fatalf("expected target install to not run, got %d calls", installTarget.installCalls)
+	}
+}
+
+func TestInstallCommandContinuesAfterTargetFailureAndReturnsError(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	successTarget := &fakeInstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+	failingTarget := &fakeInstallTarget{name: "Beta CLI", slug: "beta", installed: true, installErr: errors.New("write failed")}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{successTarget, failingTarget}
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommand(t, "demo-service", "--no-prompt")
+	if err == nil {
+		t.Fatal("expected install command to fail when one target install fails")
+	}
+
+	if successTarget.installCalls != 1 || failingTarget.installCalls != 1 {
+		t.Fatalf("expected both targets to be attempted once, got success=%d failure=%d", successTarget.installCalls, failingTarget.installCalls)
+	}
+
+	if !strings.Contains(output, "Alpha CLI: configured") {
+		t.Fatalf("expected success output for first target, got %q", output)
+	}
+
+	if !strings.Contains(output, "Beta CLI: failed") {
+		t.Fatalf("expected failure output for second target, got %q", output)
+	}
+}
+
+func overrideInstallCommandDependencies(t *testing.T) func() {
+	t.Helper()
+
+	originalLoadServices := loadServices
+	originalListInstalledTargets := listInstalledTargets
+	originalLookupTarget := lookupTarget
+	originalNewCredentialEnvSource := newCredentialEnvSource
+	originalNewCredentialFileSource := newCredentialFileSource
+	originalNewCredentialResolver := newCredentialResolver
+
+	return func() {
+		loadServices = originalLoadServices
+		listInstalledTargets = originalListInstalledTargets
+		lookupTarget = originalLookupTarget
+		newCredentialEnvSource = originalNewCredentialEnvSource
+		newCredentialFileSource = originalNewCredentialFileSource
+		newCredentialResolver = originalNewCredentialResolver
+	}
+}
+
+func copyStringMap(values map[string]string) map[string]string {
+	copyValues := make(map[string]string, len(values))
+	for key, value := range values {
+		copyValues[key] = value
+	}
+
+	return copyValues
+}
+
+func executeInstallCommand(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+
+	installCmd := newInstallCmd()
+	var stdout, stderr bytes.Buffer
+
+	installCmd.SetOut(&stdout)
+	installCmd.SetErr(&stderr)
+	installCmd.SetIn(strings.NewReader(""))
+	installCmd.SetArgs(args)
+
+	err := installCmd.Execute()
+	output := stdout.String() + stderr.String()
+
+	return output, err
+}
