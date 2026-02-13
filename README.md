@@ -11,26 +11,38 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 - Service registry loader with YAML parsing, validation, and path precedence in `internal/service/registry.go`
 - Target abstraction in `internal/target/target.go`
 - Target registry with discovery helpers in `internal/target/registry.go`
-- First target implementation in `internal/target/claudecode.go`
-- Unit tests for service loading/validation and target behavior
+- Target implementation for Claude Code in `internal/target/claudecode.go`
+- Target implementation for Codex CLI in `internal/target/codex.go`
+- Credential resolution foundation in `internal/credential/`:
+  - resolver chain (`resolver.go`)
+  - environment source (`env.go`)
+  - file source (`file.go`)
+- CI workflow via GitHub Actions
+- Changelog initialized in `CHANGELOG.md`
+- Unit tests for service loading, targets, and credentials
 
 ## Current behavior
 
-- Service definitions can be loaded from multiple directories and validated before use
+- Service definitions load from multiple directories and are validated before use
 - Validation supports `sse` and `stdio` transports
 - Duplicate service names are resolved by load order (later paths override earlier paths)
-- The current target implementation can detect installation, install/update entries, uninstall entries, and list configured services
+- Claude Code and Codex target implementations can detect installation, install/update entries, uninstall entries, and list configured services
+- Target config writes preserve unknown user-defined keys by using map-based parsing
+- Credential resolution supports environment variables first, then file-based credentials at `~/.config/mcp-wire/credentials` (stored with `0600` permissions)
 
 ## Run locally
 
 ```bash
+make test
+make build
 go test ./...
 go run ./cmd/mcp-wire --help
 ```
 
 ## Next steps
 
+- Add interactive credential flow during install (prompt + optional persistence)
 - Add `list`, `install`, `uninstall`, and `status` commands
-- Implement credential resolution (environment + file store)
-- Add more target implementations
+- Wire credential resolver into install command logic
 - Add initial service definition files under `services/`
+- Add additional target implementations
