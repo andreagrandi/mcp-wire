@@ -7,7 +7,38 @@ import (
 	"testing"
 
 	"github.com/andreagrandi/mcp-wire/internal/service"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
+
+type fakeListTarget struct {
+	name      string
+	slug      string
+	installed bool
+}
+
+func (t fakeListTarget) Name() string {
+	return t.name
+}
+
+func (t fakeListTarget) Slug() string {
+	return t.slug
+}
+
+func (t fakeListTarget) IsInstalled() bool {
+	return t.installed
+}
+
+func (t fakeListTarget) Install(_ service.Service, _ map[string]string) error {
+	return nil
+}
+
+func (t fakeListTarget) Uninstall(_ string) error {
+	return nil
+}
+
+func (t fakeListTarget) List() ([]string, error) {
+	return nil, nil
+}
 
 func TestListServicesCommandPrintsSortedServices(t *testing.T) {
 	originalLoadServices := loadServices
@@ -100,6 +131,67 @@ func TestPrintServicesListPrintsServiceWithoutDescription(t *testing.T) {
 
 	if !strings.Contains(output.String(), "  demo\n") {
 		t.Fatalf("expected service name line without description, got %q", output.String())
+	}
+}
+
+func TestListTargetsCommandPrintsSortedTargetsWithStatus(t *testing.T) {
+	originalAllTargets := allTargets
+	t.Cleanup(func() {
+		allTargets = originalAllTargets
+	})
+
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{
+			fakeListTarget{name: "Zeta CLI", slug: "zeta-cli", installed: false},
+			fakeListTarget{name: "Alpha CLI", slug: "alpha-cli", installed: true},
+		}
+	}
+
+	output, err := executeRootCommand(t, "list", "targets")
+	if err != nil {
+		t.Fatalf("expected list targets command to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "Targets:") {
+		t.Fatalf("expected heading in output, got %q", output)
+	}
+
+	alphaIndex := strings.Index(output, "alpha-cli")
+	zetaIndex := strings.Index(output, "zeta-cli")
+	if alphaIndex == -1 || zetaIndex == -1 {
+		t.Fatalf("expected both targets in output, got %q", output)
+	}
+
+	if alphaIndex > zetaIndex {
+		t.Fatalf("expected targets sorted by slug, got %q", output)
+	}
+
+	if !strings.Contains(output, "installed") {
+		t.Fatalf("expected installed status in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "not found") {
+		t.Fatalf("expected not found status in output, got %q", output)
+	}
+}
+
+func TestListTargetsCommandPrintsEmptyState(t *testing.T) {
+	originalAllTargets := allTargets
+	t.Cleanup(func() {
+		allTargets = originalAllTargets
+	})
+
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{}
+	}
+
+	output, err := executeRootCommand(t, "list", "targets")
+	if err != nil {
+		t.Fatalf("expected list targets command to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "(none)") {
+		t.Fatalf("expected empty state marker, got %q", output)
 	}
 }
 
