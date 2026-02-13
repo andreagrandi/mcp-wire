@@ -196,8 +196,9 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 func printPostInstallHints(output io.Writer, svc service.Service, targetDefinitions []target.Target) {
 	serviceName := strings.ToLower(strings.TrimSpace(svc.Name))
 	authCommand, hasAuthCommand := map[string]string{
-		"jira":   "opencode mcp auth jira",
-		"sentry": "opencode mcp auth sentry",
+		"jira":     "opencode mcp auth jira",
+		"sentry":   "opencode mcp auth sentry",
+		"context7": "opencode mcp auth context7",
 	}[serviceName]
 	if !hasAuthCommand {
 		return

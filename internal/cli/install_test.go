@@ -414,6 +414,41 @@ func TestInstallCommandPrintsOpenCodeOAuthHintForSentry(t *testing.T) {
 	}
 }
 
+func TestInstallCommandPrintsOpenCodeOAuthHintForContext7(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	opencodeTarget := &fakeInstallTarget{name: "OpenCode", slug: "opencode", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"context7": {
+				Name:      "context7",
+				Transport: "sse",
+				URL:       "https://mcp.context7.com/mcp/oauth",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "opencode" {
+			return opencodeTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommand(t, "context7", "--target", "opencode", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected context7 install to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "opencode mcp auth context7") {
+		t.Fatalf("expected OpenCode OAuth hint for context7, got %q", output)
+	}
+}
+
 func overrideInstallCommandDependencies(t *testing.T) func() {
 	t.Helper()
 
