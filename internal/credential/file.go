@@ -78,6 +78,57 @@ func (s *FileSource) Store(envName string, value string) error {
 	return s.writeAll(entries)
 }
 
+// Delete removes a credential key from the file.
+func (s *FileSource) Delete(envName string) error {
+	return s.DeleteMany(envName)
+}
+
+// DeleteMany removes multiple credential keys from the file.
+func (s *FileSource) DeleteMany(envNames ...string) error {
+	if s == nil {
+		return errors.New("file source is nil")
+	}
+
+	if len(envNames) == 0 {
+		return nil
+	}
+
+	_, err := os.Stat(s.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+
+		return fmt.Errorf("stat credentials file %q: %w", s.path, err)
+	}
+
+	entries, err := s.readAll()
+	if err != nil {
+		return err
+	}
+
+	hasChanges := false
+	for _, rawName := range envNames {
+		name := strings.TrimSpace(rawName)
+		if name == "" {
+			continue
+		}
+
+		if _, exists := entries[name]; !exists {
+			continue
+		}
+
+		delete(entries, name)
+		hasChanges = true
+	}
+
+	if !hasChanges {
+		return nil
+	}
+
+	return s.writeAll(entries)
+}
+
 func (s *FileSource) readAll() (map[string]string, error) {
 	entries := map[string]string{}
 

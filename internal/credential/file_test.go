@@ -287,3 +287,80 @@ func TestFileSourceStoreErrorIsNotErrNotSupported(t *testing.T) {
 		t.Fatal("expected concrete storage error, not ErrNotSupported")
 	}
 }
+
+func TestFileSourceDeleteRemovesSingleKey(t *testing.T) {
+	credentialsPath := filepath.Join(t.TempDir(), "credentials")
+	source := NewFileSource(credentialsPath)
+
+	if err := source.Store("TOKEN_A", "value-a"); err != nil {
+		t.Fatalf("expected TOKEN_A store to succeed: %v", err)
+	}
+
+	if err := source.Store("TOKEN_B", "value-b"); err != nil {
+		t.Fatalf("expected TOKEN_B store to succeed: %v", err)
+	}
+
+	if err := source.Delete("TOKEN_A"); err != nil {
+		t.Fatalf("expected delete to succeed: %v", err)
+	}
+
+	if _, found := source.Get("TOKEN_A"); found {
+		t.Fatal("expected TOKEN_A to be removed")
+	}
+
+	if value, found := source.Get("TOKEN_B"); !found || value != "value-b" {
+		t.Fatalf("expected TOKEN_B to remain, got %q (found=%v)", value, found)
+	}
+}
+
+func TestFileSourceDeleteManyRemovesRequestedKeys(t *testing.T) {
+	credentialsPath := filepath.Join(t.TempDir(), "credentials")
+	source := NewFileSource(credentialsPath)
+
+	if err := source.Store("TOKEN_A", "value-a"); err != nil {
+		t.Fatalf("expected TOKEN_A store to succeed: %v", err)
+	}
+
+	if err := source.Store("TOKEN_B", "value-b"); err != nil {
+		t.Fatalf("expected TOKEN_B store to succeed: %v", err)
+	}
+
+	if err := source.Store("TOKEN_C", "value-c"); err != nil {
+		t.Fatalf("expected TOKEN_C store to succeed: %v", err)
+	}
+
+	err := source.DeleteMany("TOKEN_A", "TOKEN_C")
+	if err != nil {
+		t.Fatalf("expected delete many to succeed: %v", err)
+	}
+
+	if _, found := source.Get("TOKEN_A"); found {
+		t.Fatal("expected TOKEN_A to be removed")
+	}
+
+	if _, found := source.Get("TOKEN_C"); found {
+		t.Fatal("expected TOKEN_C to be removed")
+	}
+
+	if value, found := source.Get("TOKEN_B"); !found || value != "value-b" {
+		t.Fatalf("expected TOKEN_B to remain, got %q (found=%v)", value, found)
+	}
+}
+
+func TestFileSourceDeleteManyNoopsWhenFileMissing(t *testing.T) {
+	source := NewFileSource(filepath.Join(t.TempDir(), "credentials"))
+
+	err := source.DeleteMany("TOKEN_A", "TOKEN_B")
+	if err != nil {
+		t.Fatalf("expected delete many on missing file to succeed: %v", err)
+	}
+}
+
+func TestFileSourceDeleteManyRejectsNilReceiver(t *testing.T) {
+	var source *FileSource
+
+	err := source.DeleteMany("TOKEN_A")
+	if err == nil {
+		t.Fatal("expected nil receiver to return error")
+	}
+}
