@@ -39,12 +39,16 @@
 - Integration test harness for CLI lifecycle flows (`list`, `install`, `status`, `uninstall`) using a sandboxed environment.
 - `make test-integration` target for opt-in integration tests.
 - Claude config path compatibility for both `~/.claude.json` and `~/.claude/settings.json`.
+- GoReleaser configuration for multi-platform release artifacts and checksums.
+- Homebrew tap publishing through GoReleaser (`andreagrandi/homebrew-tap`, `Formula/mcp-wire.rb`).
+- Tag-triggered release workflow (`.github/workflows/release.yml`) that runs tests and publishes releases.
 
 ### Changed
 - README expanded with implementation status, local run instructions, and next-step roadmap.
 - README updated to reflect interactive credential flow progress.
 - README updated to reflect current CLI command coverage and bundled services.
 - README updated to reflect OpenCode target support.
+- README updated with Homebrew installation instructions and release automation status.
 - OpenCode config parsing now accepts JSONC-style content in both `.json` and `.jsonc` config files.
 - Claude status discovery now includes both global and project-scoped MCP server entries.
 - Project logo added and refreshed, with scaled rendering in README.

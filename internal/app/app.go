@@ -2,10 +2,11 @@ package app
 
 const (
 	Name    = "mcp-wire"
-	Version = "0.1.0"
 	Author  = "Andrea Grandi"
 	License = "MIT"
 )
+
+var Version = "0.1.0"
 
 type App struct {
 	Name    string

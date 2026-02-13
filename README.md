@@ -4,6 +4,24 @@
 
 mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) servers across multiple AI coding tools from one interface.
 
+## Installation
+
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap andreagrandi/tap
+brew install mcp-wire
+```
+
+### From source
+
+```bash
+git clone https://github.com/andreagrandi/mcp-wire
+cd mcp-wire
+make build
+./bin/mcp-wire --help
+```
+
 ## What is implemented so far
 
 - Cobra CLI foundation with version/help support
@@ -36,6 +54,7 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
   - `jira.yaml`
   - `sentry.yaml`
 - CI workflow via GitHub Actions
+- Release automation via GoReleaser (`.goreleaser.yaml`) and tag-based GitHub workflow (`.github/workflows/release.yml`)
 - Changelog initialized in `CHANGELOG.md`
 - Unit tests for service loading, targets, and credentials
 
