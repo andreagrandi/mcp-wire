@@ -83,17 +83,6 @@ make build
 
 ```bash
 make test
-make test-integration
 make build
-go run ./cmd/mcp-wire list services
-go run ./cmd/mcp-wire list targets
-go run ./cmd/mcp-wire status
-go run ./cmd/mcp-wire --help
+go run ./cmd/mcp-wire
 ```
-
-## Next steps
-
-- Add more verified service definition files under `services/`
-- Improve output UX (status formatting/symbols and summaries)
-- Expand user docs for service and target contribution workflows
-- Add additional target implementations (for example Gemini CLI)
