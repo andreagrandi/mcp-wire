@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/andreagrandi/mcp-wire/internal/service"
@@ -26,7 +27,7 @@ func TestClaudeCodeTargetIsInstalledTrueWhenBinaryFound(t *testing.T) {
 	target := newTestClaudeCodeTarget(t)
 	target.lookPath = func(file string) (string, error) {
 		if file != "claude" {
-			t.Fatalf("expected lookup for claude binary, got %q", file)
+			return "", errors.New("not found")
 		}
 
 		return "/usr/local/bin/claude", nil
@@ -45,6 +46,50 @@ func TestClaudeCodeTargetIsInstalledFalseWhenBinaryMissing(t *testing.T) {
 
 	if target.IsInstalled() {
 		t.Fatal("expected target to be reported as not installed")
+	}
+}
+
+func TestClaudeCodeTargetIsInstalledTrueWhenFallbackBinaryExists(t *testing.T) {
+	target := newTestClaudeCodeTarget(t)
+	target.lookPath = func(_ string) (string, error) {
+		return "", errors.New("not found")
+	}
+
+	fallbackBinaryPath := filepath.Join(t.TempDir(), "claude")
+	err := os.WriteFile(fallbackBinaryPath, []byte("#!/bin/sh\nexit 0\n"), 0o755)
+	if err != nil {
+		t.Fatalf("failed to create fallback binary: %v", err)
+	}
+
+	target.fallbackBinaryPaths = []string{fallbackBinaryPath}
+	target.statPath = os.Stat
+
+	if !target.IsInstalled() {
+		t.Fatal("expected target to be reported as installed via fallback binary")
+	}
+}
+
+func TestClaudeCodeTargetIsInstalledFalseWhenFallbackBinaryNotExecutable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("windows treats existing fallback files as executable")
+	}
+
+	target := newTestClaudeCodeTarget(t)
+	target.lookPath = func(_ string) (string, error) {
+		return "", errors.New("not found")
+	}
+
+	fallbackBinaryPath := filepath.Join(t.TempDir(), "claude")
+	err := os.WriteFile(fallbackBinaryPath, []byte("#!/bin/sh\nexit 0\n"), 0o600)
+	if err != nil {
+		t.Fatalf("failed to create fallback file: %v", err)
+	}
+
+	target.fallbackBinaryPaths = []string{fallbackBinaryPath}
+	target.statPath = os.Stat
+
+	if target.IsInstalled() {
+		t.Fatal("expected target to be reported as not installed for non-executable fallback")
 	}
 }
 
@@ -277,6 +322,9 @@ func newTestClaudeCodeTarget(t *testing.T) *ClaudeCodeTarget {
 	configPath := filepath.Join(t.TempDir(), ".claude", "settings.json")
 	target := NewClaudeCodeTarget()
 	target.configPath = configPath
+	target.binaryNames = []string{"claude"}
+	target.fallbackBinaryPaths = nil
+	target.statPath = os.Stat
 	target.lookPath = func(_ string) (string, error) {
 		return "", errors.New("not found")
 	}

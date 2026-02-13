@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -21,15 +22,21 @@ const (
 
 // ClaudeCodeTarget manages MCP service configuration for Claude Code.
 type ClaudeCodeTarget struct {
-	configPath string
-	lookPath   func(file string) (string, error)
+	configPath          string
+	lookPath            func(file string) (string, error)
+	statPath            func(name string) (os.FileInfo, error)
+	binaryNames         []string
+	fallbackBinaryPaths []string
 }
 
 // NewClaudeCodeTarget returns a target instance for Claude Code.
 func NewClaudeCodeTarget() *ClaudeCodeTarget {
 	return &ClaudeCodeTarget{
-		configPath: defaultClaudeCodeConfigPath(),
-		lookPath:   exec.LookPath,
+		configPath:          defaultClaudeCodeConfigPath(),
+		lookPath:            exec.LookPath,
+		statPath:            os.Stat,
+		binaryNames:         []string{claudeCodeBinaryName, "claude-code", "claudecode"},
+		fallbackBinaryPaths: defaultClaudeCodeFallbackBinaryPaths(),
 	}
 }
 
@@ -43,10 +50,33 @@ func (t *ClaudeCodeTarget) Slug() string {
 	return claudeCodeSlug
 }
 
-// IsInstalled reports whether Claude Code is available in PATH.
+// IsInstalled reports whether Claude Code is available via supported install methods.
 func (t *ClaudeCodeTarget) IsInstalled() bool {
-	_, err := t.lookPath(claudeCodeBinaryName)
-	return err == nil
+	binaryNames := t.binaryNames
+	if len(binaryNames) == 0 {
+		binaryNames = []string{claudeCodeBinaryName}
+	}
+
+	for _, binaryName := range binaryNames {
+		if strings.TrimSpace(binaryName) == "" {
+			continue
+		}
+
+		_, err := t.lookPath(binaryName)
+		if err == nil {
+			return true
+		}
+	}
+
+	for _, fallbackPath := range t.fallbackBinaryPaths {
+		if !isExecutableFilePath(fallbackPath, t.statPath) {
+			continue
+		}
+
+		return true
+	}
+
+	return false
 }
 
 // Install writes or updates the service configuration in the target config.
@@ -185,6 +215,47 @@ func defaultClaudeCodeConfigPath() string {
 	}
 
 	return filepath.Join(homeDir, ".claude", "settings.json")
+}
+
+func defaultClaudeCodeFallbackBinaryPaths() []string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+
+	return []string{
+		filepath.Join(homeDir, ".claude", "local", "claude"),
+		filepath.Join(homeDir, ".claude", "local", "claude.cmd"),
+		filepath.Join(homeDir, ".claude", "local", "node_modules", ".bin", "claude"),
+		filepath.Join(homeDir, ".claude", "local", "node_modules", ".bin", "claude.cmd"),
+	}
+}
+
+func isExecutableFilePath(path string, statPath func(name string) (os.FileInfo, error)) bool {
+	trimmedPath := strings.TrimSpace(path)
+	if trimmedPath == "" {
+		return false
+	}
+
+	stat := statPath
+	if stat == nil {
+		stat = os.Stat
+	}
+
+	info, err := stat(trimmedPath)
+	if err != nil {
+		return false
+	}
+
+	if info.IsDir() {
+		return false
+	}
+
+	if runtime.GOOS == "windows" {
+		return true
+	}
+
+	return info.Mode().Perm()&0o111 != 0
 }
 
 func getMCPServers(config map[string]any, createIfMissing bool) (map[string]any, error) {
