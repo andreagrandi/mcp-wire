@@ -10,6 +10,7 @@
 - Target abstraction (`Target` interface) and target registry/discovery helpers.
 - Target implementation for Claude Code with install, uninstall, list, and config-preservation behavior.
 - Target implementation for Codex CLI using TOML config (`~/.codex/config.toml`) with install, uninstall, and list behavior.
+- Target implementation for OpenCode using JSON/JSONC config (`~/.config/opencode/opencode.json` / `opencode.jsonc`) with install, uninstall, and list behavior.
 - Credential resolution foundation in `internal/credential`:
   - source interface and resolver chain
   - environment variable source
@@ -31,11 +32,15 @@
 - Service registry support for loading `services/` from the current working directory.
 - Credential file delete helpers (`Delete`, `DeleteMany`) for cleanup flows.
 - Improved Claude target detection across multiple binary names and local fallback installation paths.
+- OpenCode target detection via PATH and local fallback install path (`~/.opencode/bin/opencode`).
+- JSONC parsing dependency for OpenCode config compatibility (`github.com/tidwall/jsonc`).
 - Test coverage for install, uninstall, status, and credential cleanup flows.
+- Test coverage for OpenCode target install, uninstall, list, JSONC parsing, and detection behavior.
 
 ### Changed
 - README expanded with implementation status, local run instructions, and next-step roadmap.
 - README updated to reflect interactive credential flow progress.
 - README updated to reflect current CLI command coverage and bundled services.
+- README updated to reflect OpenCode target support.
 - Project logo added and refreshed, with scaled rendering in README.
 - Repository development guidance file (`AGENTS.md`) added.
