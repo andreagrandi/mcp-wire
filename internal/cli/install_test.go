@@ -380,7 +380,7 @@ func TestInstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
 	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
 
-	output, err := executeInstallCommandWithInput(t, "\n1\n\n\n", "--no-prompt")
+	output, err := executeInstallCommandWithInput(t, "\n1\n1\n\n", "--no-prompt")
 	if err != nil {
 		t.Fatalf("expected interactive install command to succeed: %v", err)
 	}

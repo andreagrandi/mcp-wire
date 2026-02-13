@@ -187,7 +187,7 @@ func TestUninstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 		return []targetpkg.Target{alpha}
 	}
 
-	output, err := executeUninstallCommandWithInput(t, "\n1\n\n\n")
+	output, err := executeUninstallCommandWithInput(t, "\n1\n1\n\n")
 	if err != nil {
 		t.Fatalf("expected interactive uninstall command to succeed: %v", err)
 	}

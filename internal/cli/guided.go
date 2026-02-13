@@ -248,13 +248,14 @@ func pickTargetsInteractive(output ioWriter, reader *bufio.Reader) ([]targetpkg.
 			return nil, errors.New("no installed targets found")
 		}
 
-		selection, err := readTrimmedLine(reader, output, "Target numbers [e.g. 1,3] or Enter=all installed: ")
+		selection, err := readTrimmedLine(reader, output, "Target numbers [e.g. 1,3] or \"all\": ")
 		if err != nil {
 			return nil, fmt.Errorf("read target selection: %w", err)
 		}
 
 		if strings.TrimSpace(selection) == "" {
-			selection = "all"
+			fmt.Fprintln(output, "Select at least one target.")
+			continue
 		}
 
 		selectedTargets, parseErr := parseTargetSelection(selection, sortedTargets)

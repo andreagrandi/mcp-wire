@@ -331,12 +331,11 @@ func pickTargetsSurvey(cmd *cobra.Command) ([]targetpkg.Target, error) {
 
 	for {
 		var selectedLabels []string
-		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Space to toggle, Enter to confirm. Type to filter.")
+		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter.")
 
 		prompt := &survey.MultiSelect{
 			Message:  "Select targets",
 			Options:  installedLabels,
-			Default:  installedLabels,
 			PageSize: 8,
 			Filter: func(filter string, value string, _ int) bool {
 				if strings.TrimSpace(filter) == "" {
