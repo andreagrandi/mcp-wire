@@ -190,6 +190,8 @@ func promptSecretValue(
 	prompt string,
 ) (string, error) {
 	if inputFile, ok := opts.input.(*os.File); ok && term.IsTerminal(int(inputFile.Fd())) {
+		ensureTerminalCursorVisible(opts.output)
+		fmt.Fprintln(opts.output, "  Input hidden. Paste and press Enter.")
 		fmt.Fprint(opts.output, prompt)
 
 		value, err := opts.secretReader(int(inputFile.Fd()))
@@ -214,6 +216,19 @@ func promptSecretValue(
 	}
 
 	return trimmedLine, nil
+}
+
+func ensureTerminalCursorVisible(output io.Writer) {
+	outputFile, ok := output.(*os.File)
+	if !ok {
+		return
+	}
+
+	if !term.IsTerminal(int(outputFile.Fd())) {
+		return
+	}
+
+	_, _ = fmt.Fprint(output, "\x1b[?25h")
 }
 
 func askYesNo(reader *bufio.Reader, output io.Writer, prompt string, defaultYes bool) (bool, error) {
