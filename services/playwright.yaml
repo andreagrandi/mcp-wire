@@ -1,0 +1,6 @@
+name: playwright
+description: "Playwright browser automation MCP server"
+transport: stdio
+command: npx
+args: ["@playwright/mcp@latest"]
+env: []

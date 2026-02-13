@@ -5,6 +5,7 @@
 ### Added
 - Bundled service YAML files are now embedded into the binary, so `mcp-wire` can always list and install built-in services even when no external `services/` directory is present.
 - Install flows now automatically trigger OAuth authentication for OAuth-marked services on targets that support it (currently Codex and OpenCode) when running interactively.
+- Added a bundled `playwright` service definition using the official stdio setup (`npx @playwright/mcp@latest`) compatible with Claude Code, Codex, and OpenCode.
 
 ### Changed
 - Service definitions now support an optional `auth` field (for example `auth: oauth`) to drive post-install authentication behavior.
