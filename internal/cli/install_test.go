@@ -379,7 +379,7 @@ func TestInstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 	}
 }
 
-func TestInstallCommandPrintsOpenCodeOAuthHintForSentry(t *testing.T) {
+func TestInstallCommandDoesNotPrintNativeOAuthHintForSentry(t *testing.T) {
 	restore := overrideInstallCommandDependencies(t)
 	defer restore()
 
@@ -409,12 +409,12 @@ func TestInstallCommandPrintsOpenCodeOAuthHintForSentry(t *testing.T) {
 		t.Fatalf("expected sentry install to succeed: %v", err)
 	}
 
-	if !strings.Contains(output, "opencode mcp auth sentry") {
-		t.Fatalf("expected OpenCode OAuth hint for sentry, got %q", output)
+	if strings.Contains(output, "opencode mcp auth sentry") {
+		t.Fatalf("did not expect native OAuth hint for sentry, got %q", output)
 	}
 }
 
-func TestInstallCommandPrintsOpenCodeOAuthHintForContext7(t *testing.T) {
+func TestInstallCommandDoesNotPrintNativeOAuthHintForContext7(t *testing.T) {
 	restore := overrideInstallCommandDependencies(t)
 	defer restore()
 
@@ -444,8 +444,8 @@ func TestInstallCommandPrintsOpenCodeOAuthHintForContext7(t *testing.T) {
 		t.Fatalf("expected context7 install to succeed: %v", err)
 	}
 
-	if !strings.Contains(output, "opencode mcp auth context7") {
-		t.Fatalf("expected OpenCode OAuth hint for context7, got %q", output)
+	if strings.Contains(output, "opencode mcp auth context7") {
+		t.Fatalf("did not expect native OAuth hint for context7, got %q", output)
 	}
 }
 

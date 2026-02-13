@@ -8,8 +8,7 @@
   - `mcp-wire install` and `mcp-wire uninstall` without positional args now open step-by-step wizards.
   - Service selection supports type-to-filter; target selection supports multi-select with sensible defaults.
   - Wizards include review and explicit equivalent non-interactive command output.
-- Post-install OpenCode OAuth hints for OAuth services (`jira`, `sentry`, `context7`) to guide immediate authentication.
-- Expanded CLI test coverage for guided flows, interactive selection paths, and OAuth hint behavior.
+- Expanded CLI test coverage for guided flows, interactive selection paths, and install output behavior.
 
 ### Changed
 - Bundled services migrated to OAuth-first remote endpoints:
@@ -18,6 +17,7 @@
   - `context7` -> `https://mcp.context7.com/mcp/oauth`
   and their install-time env credential requirements were removed.
 - Hidden credential input UX now keeps cursor visibility and prints explicit guidance before masked entry (`Input hidden. Paste and press Enter.`).
+- Install output no longer prints target-native OAuth commands; guided output focuses on `mcp-wire` workflow and equivalent command hints.
 - README now starts with interactive terminal walkthrough examples that demonstrate the guided install flow and expected output.
 - Disabled `setup-go` cache in CI and release workflows for more deterministic pipeline behavior.
 
