@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.1.2 - 2026-02-13
+
 ### Added
 - Bundled service YAML files are now embedded into the binary, so `mcp-wire` can always list and install built-in services even when no external `services/` directory is present.
 - Install flows now automatically trigger OAuth authentication for OAuth-marked services on targets that support it (currently Codex and OpenCode) when running interactively.
