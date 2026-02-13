@@ -69,3 +69,44 @@ Create a new file in `internal/target/` implementing the `Target` interface (Nam
 ## Implementation plan
 
 See `mcp-wire-plan.md` for the full phased roadmap and design decisions.
+
+## Release process
+
+When asked to create a new release, follow this exact sequence:
+
+1. Ensure tests pass without errors:
+
+```bash
+make test
+make test-integration
+```
+
+2. Set the release version in `internal/app/app.go`:
+
+- Use the provided version if one is given.
+- Otherwise bump the patch version (example: `0.1.3` -> `0.1.4`).
+- Update `var Version = "..."` in `internal/app/app.go`.
+
+3. Update `CHANGELOG.md`:
+
+- Add a short bullet-point summary of changes since the last release.
+- Follow the existing changelog format.
+
+4. Commit the release-prep changes.
+5. Push the release-prep commit.
+6. Create the tag using the version from `internal/app/app.go`:
+
+```bash
+git tag v<version>
+```
+
+7. Push the tag:
+
+```bash
+git push origin v<version>
+```
+
+Notes:
+
+- The tag push triggers `.github/workflows/release.yml`.
+- Do not manually create a GitHub release before the workflow runs.
