@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -32,8 +33,12 @@ func newInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install <service>",
 		Short: "Install a service into one or more targets",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return runInstallWizard(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs, noPrompt)
+			}
+
 			requestedServiceName := strings.TrimSpace(args[0])
 			if requestedServiceName == "" {
 				return errors.New("service name is required")
@@ -54,39 +59,7 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			envSource := newCredentialEnvSource()
-			fileSource := newCredentialFileSource("")
-			resolver := newCredentialResolver(envSource, fileSource)
-
-			resolvedEnv, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{
-				noPrompt:   noPrompt,
-				input:      cmd.InOrStdin(),
-				output:     cmd.OutOrStdout(),
-				fileSource: fileSource,
-			})
-			if err != nil {
-				return err
-			}
-
-			printInstallPlan(cmd.OutOrStdout(), targetDefinitions)
-
-			installErrors := make([]error, 0)
-			for _, targetDefinition := range targetDefinitions {
-				err := targetDefinition.Install(svc, resolvedEnv)
-				if err != nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s: failed (%v)\n", targetDefinition.Name(), err)
-					installErrors = append(installErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
-					continue
-				}
-
-				fmt.Fprintf(cmd.OutOrStdout(), "  %s: configured\n", targetDefinition.Name())
-			}
-
-			if len(installErrors) > 0 {
-				return fmt.Errorf("failed to install service %q on one or more targets: %w", svc.Name, errors.Join(installErrors...))
-			}
-
-			return nil
+			return executeInstall(cmd, svc, targetDefinitions, noPrompt)
 		},
 	}
 
@@ -180,4 +153,40 @@ func printInstallPlan(output io.Writer, targetDefinitions []target.Target) {
 	}
 
 	fmt.Fprintf(output, "Installing to: %s\n", strings.Join(names, ", "))
+}
+
+func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions []target.Target, noPrompt bool) error {
+	envSource := newCredentialEnvSource()
+	fileSource := newCredentialFileSource("")
+	resolver := newCredentialResolver(envSource, fileSource)
+
+	resolvedEnv, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{
+		noPrompt:   noPrompt,
+		input:      cmd.InOrStdin(),
+		output:     cmd.OutOrStdout(),
+		fileSource: fileSource,
+	})
+	if err != nil {
+		return err
+	}
+
+	printInstallPlan(cmd.OutOrStdout(), targetDefinitions)
+
+	installErrors := make([]error, 0)
+	for _, targetDefinition := range targetDefinitions {
+		err := targetDefinition.Install(svc, resolvedEnv)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s: failed (%v)\n", targetDefinition.Name(), err)
+			installErrors = append(installErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
+			continue
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "  %s: configured\n", targetDefinition.Name())
+	}
+
+	if len(installErrors) > 0 {
+		return fmt.Errorf("failed to install service %q on one or more targets: %w", svc.Name, errors.Join(installErrors...))
+	}
+
+	return nil
 }

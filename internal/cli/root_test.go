@@ -2,8 +2,10 @@ package cli
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -43,4 +45,18 @@ func TestRootCommand(t *testing.T) {
 			rootCmd.SetArgs([]string{})
 		})
 	}
+}
+
+func TestRootCommandGuidedMenuExit(t *testing.T) {
+	var stdout bytes.Buffer
+	cmd := &cobra.Command{}
+	cmd.SetOut(&stdout)
+	cmd.SetIn(strings.NewReader("6\n"))
+
+	err := runGuidedMainMenu(cmd)
+	assert.NoError(t, err)
+
+	output := stdout.String()
+	assert.Contains(t, output, "Main Menu")
+	assert.Contains(t, output, "Goodbye")
 }

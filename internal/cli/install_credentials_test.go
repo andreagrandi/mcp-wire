@@ -110,11 +110,11 @@ func TestResolveServiceCredentialsPromptsAndStoresValue(t *testing.T) {
 	}
 
 	console := output.String()
-	if !strings.Contains(console, "DEMO_TOKEN is required") {
+	if !strings.Contains(console, "DEMO_TOKEN required") {
 		t.Fatalf("expected prompt output to mention required token, got %q", console)
 	}
 
-	if !strings.Contains(console, "Save to mcp-wire credential store") {
+	if !strings.Contains(console, "Save to credential store") {
 		t.Fatalf("expected prompt output to include store confirmation, got %q", console)
 	}
 }

@@ -33,6 +33,8 @@ func resolveServiceCredentials(
 	reader := bufio.NewReader(opts.input)
 	resolvedEnv := map[string]string{}
 	headerPrinted := false
+	missingRequiredCount := countMissingRequiredCredentials(svc, resolver)
+	promptedRequiredCount := 0
 
 	for _, envVar := range svc.Env {
 		envName := strings.TrimSpace(envVar.Name)
@@ -55,11 +57,14 @@ func resolveServiceCredentials(
 		}
 
 		if !headerPrinted {
-			fmt.Fprintf(opts.output, "\nConfiguring: %s\n\n", serviceDisplayName(svc))
+			fmt.Fprintf(opts.output, "\nCredentials: %s\n\n", serviceDisplayName(svc))
 			headerPrinted = true
 		}
 
-		credentialValue, err := promptForCredentialValue(envVar, reader, opts)
+		promptedRequiredCount++
+		progressLabel := fmt.Sprintf("%d/%d", promptedRequiredCount, missingRequiredCount)
+
+		credentialValue, err := promptForCredentialValue(envVar, progressLabel, reader, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -92,6 +97,7 @@ func normalizeInteractiveCredentialOptions(opts interactiveCredentialOptions) in
 
 func promptForCredentialValue(
 	envVar service.EnvVar,
+	progressLabel string,
 	reader *bufio.Reader,
 	opts interactiveCredentialOptions,
 ) (string, error) {
@@ -101,21 +107,21 @@ func promptForCredentialValue(
 	setupHint := strings.TrimSpace(envVar.SetupHint)
 
 	if description == "" {
-		fmt.Fprintf(opts.output, "  %s is required.\n", envName)
+		fmt.Fprintf(opts.output, "  [%s] %s required.\n", progressLabel, envName)
 	} else {
-		fmt.Fprintf(opts.output, "  %s is required (%s).\n", envName, description)
+		fmt.Fprintf(opts.output, "  [%s] %s required (%s).\n", progressLabel, envName, description)
 	}
 
 	if setupURL != "" {
-		fmt.Fprintf(opts.output, "  -> Create one here: %s\n", setupURL)
+		fmt.Fprintf(opts.output, "      URL: %s\n", setupURL)
 	}
 
 	if setupHint != "" {
-		fmt.Fprintf(opts.output, "     Tip: %s\n", setupHint)
+		fmt.Fprintf(opts.output, "      Hint: %s\n", setupHint)
 	}
 
 	if setupURL != "" {
-		shouldOpen, err := askYesNo(reader, opts.output, "\n  Open URL in browser? [Y/n]: ", true)
+		shouldOpen, err := askYesNo(reader, opts.output, "\n  Open URL now? [Y/n]: ", true)
 		if err != nil {
 			return "", fmt.Errorf("read browser confirmation: %w", err)
 		}
@@ -130,7 +136,7 @@ func promptForCredentialValue(
 	}
 
 	for {
-		value, err := promptSecretValue(reader, opts, "  Paste your token: ")
+		value, err := promptSecretValue(reader, opts, "  Enter value: ")
 		if err != nil {
 			return "", fmt.Errorf("read credential value for %q: %w", envName, err)
 		}
@@ -141,7 +147,7 @@ func promptForCredentialValue(
 		}
 
 		if opts.fileSource != nil {
-			shouldStore, err := askYesNo(reader, opts.output, "\n  Save to mcp-wire credential store? [Y/n]: ", true)
+			shouldStore, err := askYesNo(reader, opts.output, "\n  Save to credential store? [Y/n]: ", true)
 			if err != nil {
 				return "", fmt.Errorf("read storage confirmation: %w", err)
 			}
@@ -158,6 +164,24 @@ func promptForCredentialValue(
 		fmt.Fprintln(opts.output)
 		return value, nil
 	}
+}
+
+func countMissingRequiredCredentials(svc service.Service, resolver *credential.Resolver) int {
+	missing := 0
+	for _, envVar := range svc.Env {
+		envName := strings.TrimSpace(envVar.Name)
+		if envName == "" || !envVar.Required {
+			continue
+		}
+
+		if _, _, found := resolver.Resolve(envName); found {
+			continue
+		}
+
+		missing++
+	}
+
+	return missing
 }
 
 func promptSecretValue(

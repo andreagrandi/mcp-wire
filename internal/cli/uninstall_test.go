@@ -167,6 +167,40 @@ func TestUninstallCommandContinuesAfterTargetFailureAndReturnsError(t *testing.T
 	}
 }
 
+func TestUninstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
+	restore := overrideUninstallCommandDependencies(t)
+	defer restore()
+
+	alpha := &fakeUninstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:        "demo-service",
+				Description: "Demo service",
+				Transport:   "sse",
+				URL:         "https://example.com/mcp",
+			},
+		}, nil
+	}
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{alpha}
+	}
+
+	output, err := executeUninstallCommandWithInput(t, "\n1\n\n\n")
+	if err != nil {
+		t.Fatalf("expected interactive uninstall command to succeed: %v", err)
+	}
+
+	if alpha.uninstallCalls != 1 {
+		t.Fatalf("expected selected target to uninstall once, got %d", alpha.uninstallCalls)
+	}
+
+	if !strings.Contains(output, "Equivalent command: mcp-wire uninstall demo-service --target alpha") {
+		t.Fatalf("expected equivalent command output, got %q", output)
+	}
+}
+
 func TestServiceEnvNamesDeduplicatesNames(t *testing.T) {
 	envNames := serviceEnvNames(service.Service{
 		Env: []service.EnvVar{
@@ -233,6 +267,10 @@ func TestMaybeRemoveStoredCredentialsSkipsWhenNotInteractive(t *testing.T) {
 }
 
 func executeUninstallCommand(t *testing.T, args ...string) (string, error) {
+	return executeUninstallCommandWithInput(t, "", args...)
+}
+
+func executeUninstallCommandWithInput(t *testing.T, input string, args ...string) (string, error) {
 	t.Helper()
 
 	uninstallCmd := newUninstallCmd()
@@ -240,7 +278,7 @@ func executeUninstallCommand(t *testing.T, args ...string) (string, error) {
 
 	uninstallCmd.SetOut(&stdout)
 	uninstallCmd.SetErr(&stderr)
-	uninstallCmd.SetIn(strings.NewReader(""))
+	uninstallCmd.SetIn(strings.NewReader(input))
 	uninstallCmd.SetArgs(args)
 
 	err := uninstallCmd.Execute()
@@ -257,6 +295,7 @@ func overrideUninstallCommandDependencies(t *testing.T) func() {
 	originalLookupTarget := lookupTarget
 	originalNewCredentialFileSourceForCleanup := newCredentialFileSourceForCleanup
 	originalIsTerminalReader := isTerminalReader
+	originalAllTargets := allTargets
 
 	return func() {
 		loadServices = originalLoadServices
@@ -264,5 +303,6 @@ func overrideUninstallCommandDependencies(t *testing.T) func() {
 		lookupTarget = originalLookupTarget
 		newCredentialFileSourceForCleanup = originalNewCredentialFileSourceForCleanup
 		isTerminalReader = originalIsTerminalReader
+		allTargets = originalAllTargets
 	}
 }

@@ -343,6 +343,42 @@ func TestInstallCommandContinuesAfterTargetFailureAndReturnsError(t *testing.T) 
 	}
 }
 
+func TestInstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	alpha := &fakeInstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:        "demo-service",
+				Description: "Demo service",
+				Transport:   "sse",
+				URL:         "https://example.com/mcp",
+			},
+		}, nil
+	}
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{alpha}
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommandWithInput(t, "\n1\n\n\n", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected interactive install command to succeed: %v", err)
+	}
+
+	if alpha.installCalls != 1 {
+		t.Fatalf("expected selected target to be installed once, got %d", alpha.installCalls)
+	}
+
+	if !strings.Contains(output, "Equivalent command: mcp-wire install demo-service --target alpha") {
+		t.Fatalf("expected equivalent command output, got %q", output)
+	}
+}
+
 func overrideInstallCommandDependencies(t *testing.T) func() {
 	t.Helper()
 
@@ -352,6 +388,7 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 	originalNewCredentialEnvSource := newCredentialEnvSource
 	originalNewCredentialFileSource := newCredentialFileSource
 	originalNewCredentialResolver := newCredentialResolver
+	originalAllTargets := allTargets
 
 	return func() {
 		loadServices = originalLoadServices
@@ -360,6 +397,7 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 		newCredentialEnvSource = originalNewCredentialEnvSource
 		newCredentialFileSource = originalNewCredentialFileSource
 		newCredentialResolver = originalNewCredentialResolver
+		allTargets = originalAllTargets
 	}
 }
 
@@ -373,6 +411,10 @@ func copyStringMap(values map[string]string) map[string]string {
 }
 
 func executeInstallCommand(t *testing.T, args ...string) (string, error) {
+	return executeInstallCommandWithInput(t, "", args...)
+}
+
+func executeInstallCommandWithInput(t *testing.T, input string, args ...string) (string, error) {
 	t.Helper()
 
 	installCmd := newInstallCmd()
@@ -380,7 +422,7 @@ func executeInstallCommand(t *testing.T, args ...string) (string, error) {
 
 	installCmd.SetOut(&stdout)
 	installCmd.SetErr(&stderr)
-	installCmd.SetIn(strings.NewReader(""))
+	installCmd.SetIn(strings.NewReader(input))
 	installCmd.SetArgs(args)
 
 	err := installCmd.Execute()

@@ -35,8 +35,12 @@ func newUninstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "uninstall <service>",
 		Short: "Remove a service from one or more targets",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) == 0 {
+				return runUninstallWizard(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs)
+			}
+
 			serviceName := strings.TrimSpace(args[0])
 			if serviceName == "" {
 				return errors.New("service name is required")
@@ -65,11 +69,7 @@ func newUninstallCmd() *cobra.Command {
 				return fmt.Errorf("failed to uninstall service %q from one or more targets: %w", serviceName, errors.Join(uninstallErrors...))
 			}
 
-			if err := maybeRemoveStoredCredentials(cmd, serviceName); err != nil {
-				return err
-			}
-
-			return nil
+			return maybeRemoveStoredCredentials(cmd, serviceName)
 		},
 	}
 

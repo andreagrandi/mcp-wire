@@ -19,37 +19,41 @@ func newStatusCmd() *cobra.Command {
 		Use:   "status",
 		Short: "Show service status across installed targets",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			services, err := loadServices()
-			if err != nil {
-				return fmt.Errorf("load services: %w", err)
-			}
-
-			installedTargets := listInstalledTargets()
-			if len(installedTargets) == 0 {
-				printStatusNoTargets(cmd.OutOrStdout())
-				return nil
-			}
-
-			targetStatuses, err := listConfiguredServicesByTarget(installedTargets)
-			if err != nil {
-				return err
-			}
-
-			serviceNames := make([]string, 0, len(services))
-			for name := range services {
-				serviceNames = append(serviceNames, name)
-			}
-			sort.Strings(serviceNames)
-
-			if len(serviceNames) == 0 {
-				printStatusNoServices(cmd.OutOrStdout())
-				return nil
-			}
-
-			printStatusMatrix(cmd.OutOrStdout(), serviceNames, installedTargets, targetStatuses)
-			return nil
+			return runStatusFlow(cmd.OutOrStdout())
 		},
 	}
+}
+
+func runStatusFlow(output io.Writer) error {
+	services, err := loadServices()
+	if err != nil {
+		return fmt.Errorf("load services: %w", err)
+	}
+
+	installedTargets := listInstalledTargets()
+	if len(installedTargets) == 0 {
+		printStatusNoTargets(output)
+		return nil
+	}
+
+	targetStatuses, err := listConfiguredServicesByTarget(installedTargets)
+	if err != nil {
+		return err
+	}
+
+	serviceNames := make([]string, 0, len(services))
+	for name := range services {
+		serviceNames = append(serviceNames, name)
+	}
+	sort.Strings(serviceNames)
+
+	if len(serviceNames) == 0 {
+		printStatusNoServices(output)
+		return nil
+	}
+
+	printStatusMatrix(output, serviceNames, installedTargets, targetStatuses)
+	return nil
 }
 
 func listConfiguredServicesByTarget(targetDefinitions []target.Target) (map[string]map[string]struct{}, error) {
