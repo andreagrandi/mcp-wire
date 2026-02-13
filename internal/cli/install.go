@@ -188,5 +188,32 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 		return fmt.Errorf("failed to install service %q on one or more targets: %w", svc.Name, errors.Join(installErrors...))
 	}
 
+	printPostInstallHints(cmd.OutOrStdout(), svc, targetDefinitions)
+
 	return nil
+}
+
+func printPostInstallHints(output io.Writer, svc service.Service, targetDefinitions []target.Target) {
+	serviceName := strings.ToLower(strings.TrimSpace(svc.Name))
+	authCommand, hasAuthCommand := map[string]string{
+		"jira":   "opencode mcp auth jira",
+		"sentry": "opencode mcp auth sentry",
+	}[serviceName]
+	if !hasAuthCommand {
+		return
+	}
+
+	hasOpenCodeTarget := false
+	for _, targetDefinition := range targetDefinitions {
+		if strings.EqualFold(strings.TrimSpace(targetDefinition.Slug()), "opencode") {
+			hasOpenCodeTarget = true
+			break
+		}
+	}
+
+	if !hasOpenCodeTarget {
+		return
+	}
+
+	fmt.Fprintf(output, "  OpenCode OAuth: run %q to authenticate.\n", authCommand)
 }

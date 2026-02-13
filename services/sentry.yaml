@@ -1,10 +1,5 @@
 name: sentry
-description: "Sentry error tracking MCP"
+description: "Sentry MCP server (OAuth)"
 transport: sse
-url: "https://mcp.sentry.dev/sse"
-env:
-  - name: SENTRY_AUTH_TOKEN
-    description: "Sentry authentication token"
-    required: true
-    setup_url: "https://sentry.io/settings/account/api/auth-tokens/"
-    setup_hint: "Create a token with project:read and event:read scopes"
+url: "https://mcp.sentry.dev/mcp"
+env: []

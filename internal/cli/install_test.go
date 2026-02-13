@@ -379,6 +379,41 @@ func TestInstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 	}
 }
 
+func TestInstallCommandPrintsOpenCodeOAuthHintForSentry(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	opencodeTarget := &fakeInstallTarget{name: "OpenCode", slug: "opencode", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"sentry": {
+				Name:      "sentry",
+				Transport: "sse",
+				URL:       "https://mcp.sentry.dev/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "opencode" {
+			return opencodeTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommand(t, "sentry", "--target", "opencode", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected sentry install to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "opencode mcp auth sentry") {
+		t.Fatalf("expected OpenCode OAuth hint for sentry, got %q", output)
+	}
+}
+
 func overrideInstallCommandDependencies(t *testing.T) func() {
 	t.Helper()
 

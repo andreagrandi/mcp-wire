@@ -1,10 +1,5 @@
 name: jira
-description: "Jira project management MCP (Atlassian)"
+description: "Atlassian Rovo MCP server (OAuth)"
 transport: sse
-url: "https://mcp.atlassian.com/v1/sse"
-env:
-  - name: JIRA_API_TOKEN
-    description: "Atlassian API token"
-    required: true
-    setup_url: "https://id.atlassian.com/manage-profile/security/api-tokens"
-    setup_hint: "Create an API token from your Atlassian account settings"
+url: "https://mcp.atlassian.com/v1/mcp"
+env: []
