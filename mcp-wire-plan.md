@@ -11,6 +11,16 @@ The architecture has two dimensions:
 
 The CLI combines the two: the user picks a service, the tool resolves credentials, and writes the config into one or more targets.
 
+Interaction modes:
+
+- **Guided mode (default)**: running `mcp-wire` with no subcommand starts an interactive menu/wizard for common workflows.
+- **Explicit mode (advanced/CI)**: command-based syntax (for example `mcp-wire install <service> --target <slug> --no-prompt`) remains fully supported for scripting.
+
+UX principle:
+
+- Optimize for users who do not remember command syntax.
+- At the end of guided flows, print the equivalent explicit command for reproducibility.
+
 ---
 
 ## Project Structure
@@ -291,12 +301,13 @@ On `Store()`: read the file, update or append the key, write back.
 
 This lives in the install command logic (not in the credential package). When a required env var is not found by the resolver:
 
-1. Print the env var name and description.
+1. Print the env var name, description, and why it is needed.
 2. If `setup_url` is provided, print it and offer to open in browser (use `open` / `xdg-open` / `start` depending on OS).
 3. If `setup_hint` is provided, print it.
-4. Prompt the user to paste the value (mask input for security).
-5. Ask where to store: file store or skip (manage manually).
-6. If file store chosen, call `source.Store()`.
+4. Show progress when multiple credentials are required (example: `1/2`, `2/2`).
+5. Prompt the user to paste the value (mask input for security).
+6. Ask where to store: file store or skip (manage manually).
+7. If file store chosen, call `source.Store()`.
 
 Example output:
 
@@ -324,6 +335,52 @@ Example output:
 ## Phase 4: CLI Commands
 
 Use `github.com/spf13/cobra` for command structure.
+
+### 4A — Guided Interactive UX (high priority)
+
+#### 4A.1 — Main interactive entry (`mcp-wire`)
+
+When the user runs `mcp-wire` with no subcommand, open an interactive menu:
+
+1. Install a service
+2. Uninstall a service
+3. Show status
+4. List services
+5. List targets
+6. Exit
+
+#### 4A.2 — Install wizard flow
+
+1. **Service selection**
+   - Show a searchable/filterable list (name + description).
+   - Support quick search by substring.
+2. **Target selection**
+   - Show detected installed targets first.
+   - Allow multi-select.
+3. **Credential step (for each required env var)**
+   - Show description.
+   - Show setup URL and ask whether to open it.
+   - Show setup hint/scopes.
+   - Prompt with masked input.
+   - Ask whether to save in credential store.
+4. **Confirmation step**
+   - Show selected service, targets, and credential source summary.
+5. **Apply + results**
+   - Print per-target success/failure.
+   - Print equivalent explicit command.
+
+#### 4A.3 — Uninstall wizard flow
+
+1. Service selection (searchable)
+2. Target selection (multi-select)
+3. Confirmation
+4. Optional credential cleanup prompt
+
+#### 4A.4 — Fallback behavior for explicit commands
+
+- `mcp-wire install` with no service argument should enter the service picker.
+- `mcp-wire uninstall` with no service argument should enter the service picker.
+- Explicit args/flags continue to work unchanged.
 
 ### 4.1 — `mcp-wire list services`
 
@@ -365,11 +422,12 @@ Flags:
 Flow:
 
 1. Load the service definition by name.
-2. For each required env var, run the credential resolver.
-3. If not found and `--no-prompt` is not set, run the interactive prompt (Phase 3.4).
-4. If not found and `--no-prompt` is set, exit with error.
-5. For each target (filtered by `--target` or all installed), call `target.Install()`.
-6. Print results.
+2. If `<service>` is omitted, enter interactive service selection.
+3. For each required env var, run the credential resolver.
+4. If not found and `--no-prompt` is not set, run the interactive prompt (Phase 3.4).
+5. If not found and `--no-prompt` is set, exit with error.
+6. For each target (filtered by `--target` or all installed), call `target.Install()`.
+7. Print results.
 
 ### 4.4 — `mcp-wire uninstall <service>`
 
@@ -380,7 +438,8 @@ Flags:
 Flow:
 
 1. For each target, call `target.Uninstall(serviceName)`.
-2. Optionally ask if the user wants to remove stored credentials for this service.
+2. If `<service>` is omitted, enter interactive service selection.
+3. Optionally ask if the user wants to remove stored credentials for this service.
 
 ### 4.5 — `mcp-wire status`
 
@@ -467,6 +526,9 @@ No other external dependencies should be needed for v0.1.
 - **Target implementations**: test Install/Uninstall/List against temporary config files. Create a temp dir, write a sample config, run the operation, assert the result.
 - **Credential resolver**: test the chain order (env takes precedence over file), test the file store read/write.
 - **Integration test**: write a test that loads a service YAML, creates a temp config file, runs Install, reads back the config, and verifies the MCP entry is correct.
+- **Guided interactive flow tests**: test menu navigation, service search/filter behavior, target multi-select, and credential prompt flow using mocked input/output streams.
+- **Sandboxed CLI integration tests**: run end-to-end install/status/uninstall flows in temporary HOME/PATH to avoid touching user config.
+- **Manual QA checklist**: test on a machine with existing MCP configs and a clean machine; verify no unrelated config keys are removed.
 
 ### 6.3 — Build
 
@@ -504,6 +566,11 @@ Implement in this exact order to have something working as early as possible:
 10. **Codex target implementation** — second target, validates the abstraction.
 11. **Initial service YAML files** — ship with 3-5 verified services.
 12. **README, contributing guide** — explain how to add services and targets.
+13. **Guided main menu** — `mcp-wire` with no args opens interactive navigation.
+14. **Install wizard UX** — searchable service picker, target selection, credential guidance.
+15. **Uninstall wizard parity** — same guided UX model as install.
+16. **Interactive UX tests + sandbox integration tests** — prevent regressions in guided flows.
+17. **Equivalent-command summary in guided mode** — print scriptable command at the end of each workflow.
 
 ---
 
