@@ -11,6 +11,8 @@
 - Service definitions now support an optional `auth` field (for example `auth: oauth`) to drive post-install authentication behavior.
 - Guided target selection now starts with no preselected targets, so users explicitly choose where to install.
 - Survey target picker now documents quick controls (`Right` to select all, `Left` to clear all), while plain prompts require explicit target numbers (or `all`).
+- Guided Survey wizards now support `Esc` back navigation (review -> targets, targets -> service, service -> cancel wizard).
+- Pressing `Esc` in the guided main menu now keeps the user in the menu instead of failing the prompt.
 
 ## v0.1.1 - 2026-02-13
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	surveycore "github.com/AlecAivazis/survey/v2/core"
+	surveyterminal "github.com/AlecAivazis/survey/v2/terminal"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
@@ -19,6 +20,8 @@ import (
 var askSurveyOne = func(prompt survey.Prompt, response interface{}, opts ...survey.AskOpt) error {
 	return survey.AskOne(prompt, response, opts...)
 }
+
+var errWizardBack = errors.New("wizard back")
 
 func canUseInteractiveUI(input io.Reader, output io.Writer) bool {
 	inputFile, inputOK := input.(*os.File)
@@ -32,7 +35,7 @@ func canUseInteractiveUI(input io.Reader, output io.Writer) bool {
 
 func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 	for {
-		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select.")
+		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc keeps you in the main menu.")
 
 		choice := ""
 		prompt := &survey.Select{
@@ -42,6 +45,11 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 		}
 
 		if err := askSurveyPrompt(cmd, prompt, &choice); err != nil {
+			if errors.Is(err, errWizardBack) {
+				fmt.Fprintln(cmd.OutOrStdout())
+				continue
+			}
+
 			return fmt.Errorf("read menu option: %w", err)
 		}
 
@@ -85,63 +93,89 @@ func runInstallWizardSurvey(cmd *cobra.Command, targetSlugs []string, noPrompt b
 
 	fmt.Fprintln(output, "Install Wizard")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 1/4: Service")
 
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceSurvey(cmd, services)
-	if err != nil {
-		return err
+serviceStep:
+	for {
+		fmt.Fprintln(output, "Step 1/4: Service")
+
+		svc, err := pickServiceSurvey(cmd, services)
+		if err != nil {
+			if errors.Is(err, errWizardBack) {
+				fmt.Fprintln(output, "Install cancelled.")
+				return nil
+			}
+
+			return err
+		}
+
+	targetStep:
+		for {
+			fmt.Fprintln(output)
+			fmt.Fprintln(output, "Step 2/4: Targets")
+
+			targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+			if err != nil {
+				if errors.Is(err, errWizardBack) {
+					continue serviceStep
+				}
+
+				return err
+			}
+
+			for {
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 3/4: Review")
+				fmt.Fprintf(output, "Service: %s\n", svc.Name)
+				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+				credentialMode := "prompt as needed"
+				if noPrompt {
+					credentialMode = "existing values only"
+				}
+				fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
+
+				confirmChoice := ""
+				printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+				confirmPrompt := &survey.Select{
+					Message:  "Apply changes?",
+					Options:  []string{"Yes", "No"},
+					Default:  "Yes",
+					PageSize: 2,
+				}
+				if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+					if errors.Is(err, errWizardBack) {
+						if len(targetSlugs) > 0 {
+							continue serviceStep
+						}
+
+						continue targetStep
+					}
+
+					return fmt.Errorf("read install confirmation: %w", err)
+				}
+
+				if confirmChoice != "Yes" {
+					fmt.Fprintln(output, "Install cancelled.")
+					return nil
+				}
+
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 4/4: Apply")
+
+				if err := executeInstall(cmd, svc, targetDefinitions, noPrompt); err != nil {
+					return err
+				}
+
+				fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentInstallCommand(svc.Name, targetDefinitions))
+				return nil
+			}
+		}
 	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 2/4: Targets")
-
-	targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 3/4: Review")
-	fmt.Fprintf(output, "Service: %s\n", svc.Name)
-	fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
-	credentialMode := "prompt as needed"
-	if noPrompt {
-		credentialMode = "existing values only"
-	}
-	fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
-
-	confirmChoice := ""
-	printSurveyHint(output, "Use Up/Down arrows, Enter to select.")
-
-	confirmPrompt := &survey.Select{
-		Message:  "Apply changes?",
-		Options:  []string{"Yes", "No"},
-		Default:  "Yes",
-		PageSize: 2,
-	}
-	if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
-		return fmt.Errorf("read install confirmation: %w", err)
-	}
-
-	if confirmChoice != "Yes" {
-		fmt.Fprintln(output, "Install cancelled.")
-		return nil
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 4/4: Apply")
-
-	if err := executeInstall(cmd, svc, targetDefinitions, noPrompt); err != nil {
-		return err
-	}
-
-	fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentInstallCommand(svc.Name, targetDefinitions))
-	return nil
 }
 
 func runUninstallWizardSurvey(cmd *cobra.Command, targetSlugs []string) error {
@@ -149,76 +183,102 @@ func runUninstallWizardSurvey(cmd *cobra.Command, targetSlugs []string) error {
 
 	fmt.Fprintln(output, "Uninstall Wizard")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 1/4: Service")
 
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceSurvey(cmd, services)
-	if err != nil {
-		return err
-	}
+serviceStep:
+	for {
+		fmt.Fprintln(output, "Step 1/4: Service")
 
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 2/4: Targets")
-
-	targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
-	if err != nil {
-		return err
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 3/4: Review")
-	fmt.Fprintf(output, "Service: %s\n", svc.Name)
-	fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
-
-	confirmChoice := ""
-	printSurveyHint(output, "Use Up/Down arrows, Enter to select.")
-
-	confirmPrompt := &survey.Select{
-		Message:  "Apply changes?",
-		Options:  []string{"Yes", "No"},
-		Default:  "Yes",
-		PageSize: 2,
-	}
-	if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
-		return fmt.Errorf("read uninstall confirmation: %w", err)
-	}
-
-	if confirmChoice != "Yes" {
-		fmt.Fprintln(output, "Uninstall cancelled.")
-		return nil
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 4/4: Apply")
-
-	printUninstallPlan(output, targetDefinitions)
-
-	uninstallErrors := make([]error, 0)
-	for _, targetDefinition := range targetDefinitions {
-		err := targetDefinition.Uninstall(svc.Name)
+		svc, err := pickServiceSurvey(cmd, services)
 		if err != nil {
-			fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
-			uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
-			continue
+			if errors.Is(err, errWizardBack) {
+				fmt.Fprintln(output, "Uninstall cancelled.")
+				return nil
+			}
+
+			return err
 		}
 
-		fmt.Fprintf(output, "  %s: removed\n", targetDefinition.Name())
-	}
+	targetStep:
+		for {
+			fmt.Fprintln(output)
+			fmt.Fprintln(output, "Step 2/4: Targets")
 
-	if len(uninstallErrors) > 0 {
-		return fmt.Errorf("failed to uninstall service %q from one or more targets: %w", svc.Name, errors.Join(uninstallErrors...))
-	}
+			targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+			if err != nil {
+				if errors.Is(err, errWizardBack) {
+					continue serviceStep
+				}
 
-	if err := maybeRemoveStoredCredentials(cmd, svc.Name); err != nil {
-		return err
-	}
+				return err
+			}
 
-	fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
-	return nil
+			for {
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 3/4: Review")
+				fmt.Fprintf(output, "Service: %s\n", svc.Name)
+				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+
+				confirmChoice := ""
+				printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+				confirmPrompt := &survey.Select{
+					Message:  "Apply changes?",
+					Options:  []string{"Yes", "No"},
+					Default:  "Yes",
+					PageSize: 2,
+				}
+				if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+					if errors.Is(err, errWizardBack) {
+						if len(targetSlugs) > 0 {
+							continue serviceStep
+						}
+
+						continue targetStep
+					}
+
+					return fmt.Errorf("read uninstall confirmation: %w", err)
+				}
+
+				if confirmChoice != "Yes" {
+					fmt.Fprintln(output, "Uninstall cancelled.")
+					return nil
+				}
+
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 4/4: Apply")
+
+				printUninstallPlan(output, targetDefinitions)
+
+				uninstallErrors := make([]error, 0)
+				for _, targetDefinition := range targetDefinitions {
+					err := targetDefinition.Uninstall(svc.Name)
+					if err != nil {
+						fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
+						uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
+						continue
+					}
+
+					fmt.Fprintf(output, "  %s: removed\n", targetDefinition.Name())
+				}
+
+				if len(uninstallErrors) > 0 {
+					return fmt.Errorf("failed to uninstall service %q from one or more targets: %w", svc.Name, errors.Join(uninstallErrors...))
+				}
+
+				if err := maybeRemoveStoredCredentials(cmd, svc.Name); err != nil {
+					return err
+				}
+
+				fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
+				return nil
+			}
+		}
+	}
 }
 
 func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service) (service.Service, error) {
@@ -249,7 +309,7 @@ func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service) 
 	}
 
 	selectedLabel := ""
-	printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Type to filter.")
+	printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Type to filter. Esc goes back.")
 
 	prompt := &survey.Select{
 		Message:  "Select service",
@@ -331,7 +391,7 @@ func pickTargetsSurvey(cmd *cobra.Command) ([]targetpkg.Target, error) {
 
 	for {
 		var selectedLabels []string
-		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter.")
+		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter. Esc goes back.")
 
 		prompt := &survey.MultiSelect{
 			Message:  "Select targets",
@@ -398,13 +458,25 @@ func askSurveyPrompt(cmd *cobra.Command, prompt survey.Prompt, response interfac
 		icons.UnmarkedOption.Format = "default"
 	})}
 
+	var escBackInput *surveyEscBackInput
+
 	inputFile, inputOK := cmd.InOrStdin().(*os.File)
 	outputFile, outputOK := cmd.OutOrStdout().(*os.File)
 	if inputOK && outputOK {
-		options = append(options, survey.WithStdio(inputFile, outputFile, outputFile))
+		escBackInput = newSurveyEscBackInput(inputFile)
+		options = append(options, survey.WithStdio(escBackInput, outputFile, outputFile))
 	}
 
-	return askSurveyOne(prompt, response, options...)
+	err := askSurveyOne(prompt, response, options...)
+	if err == nil {
+		return nil
+	}
+
+	if escBackInput != nil && escBackInput.ConsumeBackPressed() && errors.Is(err, surveyterminal.InterruptErr) {
+		return errWizardBack
+	}
+
+	return err
 }
 
 func surveyColorsEnabled() bool {
