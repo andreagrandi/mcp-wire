@@ -464,6 +464,84 @@ func TestInstallCommandDoesNotPrintNativeOAuthHintForContext7(t *testing.T) {
 	}
 }
 
+func TestInstallCommandPrintsClaudeOAuthHintWhenAutoAuthIsUnsupported(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	claudeTarget := &fakeInstallTarget{name: "Claude Code", slug: "claudecode", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"jira": {
+				Name:      "jira",
+				Transport: "sse",
+				Auth:      "oauth",
+				URL:       "https://mcp.atlassian.com/v1/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "claudecode" {
+			return claudeTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
+
+	output, err := executeInstallCommand(t, "jira", "--target", "claudecode", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected jira install to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "Claude Code: complete OAuth in Claude Code with /mcp") {
+		t.Fatalf("expected Claude OAuth guidance in output, got %q", output)
+	}
+
+	if strings.Contains(output, "authentication skipped") {
+		t.Fatalf("expected Claude-specific OAuth hint instead of generic skipped line, got %q", output)
+	}
+}
+
+func TestInstallCommandKeepsGenericOAuthHintForOtherUnsupportedTargets(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	unsupportedTarget := &fakeInstallTarget{name: "Other CLI", slug: "other", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"sentry": {
+				Name:      "sentry",
+				Transport: "sse",
+				Auth:      "oauth",
+				URL:       "https://mcp.sentry.dev/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "other" {
+			return unsupportedTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
+
+	output, err := executeInstallCommand(t, "sentry", "--target", "other", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected sentry install to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "Other CLI: authentication skipped (automatic OAuth is not supported by this target)") {
+		t.Fatalf("expected generic OAuth skip output, got %q", output)
+	}
+}
+
 func TestInstallCommandAutomaticallyAuthenticatesOAuthService(t *testing.T) {
 	restore := overrideInstallCommandDependencies(t)
 	defer restore()

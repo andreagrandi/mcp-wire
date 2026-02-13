@@ -194,7 +194,13 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 
 		authTarget, supportsAuth := targetDefinition.(target.AuthTarget)
 		if !supportsAuth {
-			fmt.Fprintf(cmd.OutOrStdout(), "  %s: authentication skipped (automatic OAuth is not supported by this target)\n", targetDefinition.Name())
+			manualAuthHint := oauthManualAuthHint(targetDefinition)
+			if manualAuthHint != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", targetDefinition.Name(), manualAuthHint)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s: authentication skipped (automatic OAuth is not supported by this target)\n", targetDefinition.Name())
+			}
+
 			continue
 		}
 
@@ -236,4 +242,15 @@ func serviceUsesOAuth(svc service.Service) bool {
 
 	url := strings.ToLower(strings.TrimSpace(svc.URL))
 	return strings.Contains(url, "/mcp/oauth")
+}
+
+func oauthManualAuthHint(targetDefinition target.Target) string {
+	targetSlug := strings.ToLower(strings.TrimSpace(targetDefinition.Slug()))
+
+	switch targetSlug {
+	case "claudecode":
+		return "complete OAuth in Claude Code with /mcp"
+	default:
+		return ""
+	}
 }
