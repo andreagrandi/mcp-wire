@@ -14,7 +14,8 @@ import (
 //
 // If no paths are provided, default locations are used in this order:
 //  1. services/ relative to the executable
-//  2. ~/.config/mcp-wire/services
+//  2. services/ relative to the current working directory
+//  3. ~/.config/mcp-wire/services
 //
 // When multiple files define the same service name, the last loaded definition
 // wins. With default paths, this means user-local definitions override bundled
@@ -101,14 +102,40 @@ func resolveServicePaths(paths ...string) ([]string, error) {
 
 	loadPaths := []string{binaryPath}
 
+	workingDirectory, err := os.Getwd()
+	if err == nil {
+		loadPaths = append(loadPaths, filepath.Join(workingDirectory, "services"))
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		return loadPaths, nil
+		return dedupePaths(loadPaths), nil
 	}
 
 	loadPaths = append(loadPaths, filepath.Join(homeDir, ".config", "mcp-wire", "services"))
 
-	return loadPaths, nil
+	return dedupePaths(loadPaths), nil
+}
+
+func dedupePaths(paths []string) []string {
+	seenPaths := make(map[string]struct{}, len(paths))
+	uniquePaths := make([]string, 0, len(paths))
+
+	for _, path := range paths {
+		normalizedPath := filepath.Clean(path)
+		if normalizedPath == "" {
+			continue
+		}
+
+		if _, seen := seenPaths[normalizedPath]; seen {
+			continue
+		}
+
+		seenPaths[normalizedPath] = struct{}{}
+		uniquePaths = append(uniquePaths, path)
+	}
+
+	return uniquePaths
 }
 
 func loadServiceFile(path string) (Service, error) {

@@ -1,0 +1,5 @@
+name: context7
+description: "Context7 documentation lookup MCP"
+transport: sse
+url: "https://mcp.context7.com/mcp"
+env: []

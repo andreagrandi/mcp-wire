@@ -23,32 +23,46 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
   - optional browser open
   - masked secret input on terminal
   - optional persistence to file credentials store
+- CLI commands:
+  - `mcp-wire list services`
+  - `mcp-wire list targets`
+  - `mcp-wire install <service> [--target ...] [--no-prompt]`
+  - `mcp-wire uninstall <service> [--target ...]`
+  - `mcp-wire status`
+- Initial bundled service definitions in `services/`:
+  - `context7.yaml`
+  - `jira.yaml`
+  - `sentry.yaml`
 - CI workflow via GitHub Actions
 - Changelog initialized in `CHANGELOG.md`
 - Unit tests for service loading, targets, and credentials
 
 ## Current behavior
 
-- Service definitions load from multiple directories and are validated before use
+- Service definitions load from executable-relative `services/`, working-directory `services/`, and `~/.config/mcp-wire/services/`
 - Validation supports `sse` and `stdio` transports
 - Duplicate service names are resolved by load order (later paths override earlier paths)
 - Claude Code and Codex target implementations can detect installation, install/update entries, uninstall entries, and list configured services
 - Target config writes preserve unknown user-defined keys by using map-based parsing
 - Credential resolution supports environment variables first, then file-based credentials at `~/.config/mcp-wire/credentials` (stored with `0600` permissions)
 - Interactive credential prompts can collect missing required values with optional setup URL opening and optional storage in the credential file store
+- `status` prints a service × target matrix for installed targets
+- `uninstall` can optionally remove matching stored credentials for the selected service (interactive terminals)
 
 ## Run locally
 
 ```bash
 make test
 make build
-go test ./...
+go run ./cmd/mcp-wire list services
+go run ./cmd/mcp-wire list targets
+go run ./cmd/mcp-wire status
 go run ./cmd/mcp-wire --help
 ```
 
 ## Next steps
 
-- Add `list`, `install`, `uninstall`, and `status` commands
-- Wire interactive credential flow and resolver into the install command end-to-end
-- Add initial service definition files under `services/`
+- Add more verified service definition files under `services/`
+- Improve output UX (status formatting/symbols and summaries)
+- Expand user docs for service and target contribution workflows
 - Add additional target implementations

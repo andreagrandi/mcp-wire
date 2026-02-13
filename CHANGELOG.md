@@ -22,9 +22,20 @@
 - Test coverage for the interactive credential flow and prompt utilities.
 - Terminal secret input dependency (`golang.org/x/term`).
 - Automated CI workflow via GitHub Actions.
+- `list` commands for services and targets.
+- `install` command with target filtering, `--no-prompt`, credential resolution chain wiring, and per-target install results.
+- `uninstall` command with target filtering and per-target uninstall results.
+- Optional interactive credential cleanup during uninstall for matching service environment keys.
+- `status` command with service × target matrix output for installed targets.
+- Initial bundled service definition files in `services/` (`context7`, `jira`, `sentry`).
+- Service registry support for loading `services/` from the current working directory.
+- Credential file delete helpers (`Delete`, `DeleteMany`) for cleanup flows.
+- Improved Claude target detection across multiple binary names and local fallback installation paths.
+- Test coverage for install, uninstall, status, and credential cleanup flows.
 
 ### Changed
 - README expanded with implementation status, local run instructions, and next-step roadmap.
 - README updated to reflect interactive credential flow progress.
+- README updated to reflect current CLI command coverage and bundled services.
 - Project logo added and refreshed, with scaled rendering in README.
 - Repository development guidance file (`AGENTS.md`) added.
