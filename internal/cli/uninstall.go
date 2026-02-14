@@ -31,14 +31,22 @@ func init() {
 
 func newUninstallCmd() *cobra.Command {
 	var targetSlugs []string
+	var scopeValue string
 
 	cmd := &cobra.Command{
 		Use:   "uninstall <service>",
 		Short: "Remove a service from one or more targets",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			scope, err := parseInstallUninstallScope(scopeValue)
+			if err != nil {
+				return err
+			}
+
+			scopeSet := cmd.Flags().Changed("scope")
+
 			if len(args) == 0 {
-				return runUninstallWizard(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs)
+				return runUninstallWizardWithScope(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs, scope, scopeSet)
 			}
 
 			serviceName := strings.TrimSpace(args[0])
@@ -55,7 +63,14 @@ func newUninstallCmd() *cobra.Command {
 
 			uninstallErrors := make([]error, 0)
 			for _, targetDefinition := range targetDefinitions {
-				err := targetDefinition.Uninstall(serviceName)
+				var err error
+				scopedTarget, supportsScopes := targetDefinition.(target.ScopedTarget)
+				if supportsScopes && targetSupportsScope(targetDefinition, scope) {
+					err = scopedTarget.UninstallWithScope(serviceName, scope)
+				} else {
+					err = targetDefinition.Uninstall(serviceName)
+				}
+
 				if err != nil {
 					fmt.Fprintf(cmd.OutOrStdout(), "  %s: failed (%v)\n", targetDefinition.Name(), err)
 					uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
@@ -74,6 +89,7 @@ func newUninstallCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringArrayVar(&targetSlugs, "target", nil, "Uninstall from specific target slug(s); can be repeated")
+	cmd.Flags().StringVar(&scopeValue, "scope", string(target.ConfigScopeUser), "Config scope for supported targets: user or project")
 
 	return cmd
 }

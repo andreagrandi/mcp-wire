@@ -6,6 +6,15 @@ import (
 	"github.com/andreagrandi/mcp-wire/internal/service"
 )
 
+// ConfigScope controls where a target applies configuration when supported.
+type ConfigScope string
+
+const (
+	ConfigScopeUser      ConfigScope = "user"
+	ConfigScopeProject   ConfigScope = "project"
+	ConfigScopeEffective ConfigScope = "effective"
+)
+
 // Target defines how a CLI integration manages MCP services.
 type Target interface {
 	// Name returns a human-readable target name.
@@ -26,6 +35,15 @@ type Target interface {
 
 	// List returns the names of currently configured services.
 	List() ([]string, error)
+}
+
+// ScopedTarget can install/list/uninstall services in multiple scopes.
+// Targets that do not implement this interface are treated as user/global only.
+type ScopedTarget interface {
+	SupportedScopes() []ConfigScope
+	InstallWithScope(svc service.Service, resolvedEnv map[string]string, scope ConfigScope) error
+	UninstallWithScope(serviceName string, scope ConfigScope) error
+	ListWithScope(scope ConfigScope) ([]string, error)
 }
 
 // AuthTarget can perform an interactive authentication flow for a configured service.

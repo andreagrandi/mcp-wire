@@ -379,8 +379,9 @@ func TestClaudeCodeTargetListReadsNearestParentProjectMCPServers(t *testing.T) {
 	}
 }
 
-func TestClaudeCodeTargetListAggregatesTopLevelAndAllProjects(t *testing.T) {
-	setWorkingDirectory(t, t.TempDir())
+func TestClaudeCodeTargetListReturnsEffectiveScopeForCurrentProject(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
 
 	target := newTestClaudeCodeTarget(t)
 
@@ -389,7 +390,7 @@ func TestClaudeCodeTargetListAggregatesTopLevelAndAllProjects(t *testing.T) {
 			"global-service": map[string]any{"type": "sse", "url": "https://global.example.com"},
 		},
 		"projects": map[string]any{
-			"/tmp/project-a": map[string]any{
+			projectRoot: map[string]any{
 				"mcpServers": map[string]any{
 					"project-service-a": map[string]any{"type": "sse", "url": "https://a.example.com"},
 				},
@@ -409,11 +410,11 @@ func TestClaudeCodeTargetListAggregatesTopLevelAndAllProjects(t *testing.T) {
 		t.Fatalf("expected list to succeed: %v", err)
 	}
 
-	if len(services) != 3 {
-		t.Fatalf("expected 3 aggregated services, got %#v", services)
+	if len(services) != 2 {
+		t.Fatalf("expected 2 effective-scope services, got %#v", services)
 	}
 
-	expected := []string{"global-service", "project-service-a", "project-service-b"}
+	expected := []string{"global-service", "project-service-a"}
 	for i, expectedName := range expected {
 		if services[i] != expectedName {
 			t.Fatalf("expected service %q at index %d, got %#v", expectedName, i, services)
@@ -436,7 +437,7 @@ func TestClaudeCodeTargetInstallWritesProjectScopedMCPServers(t *testing.T) {
 	writeTargetConfigFile(t, target.configPath, initialConfig)
 
 	svc := service.Service{Name: "service-a", Transport: "sse", URL: "https://a.example.com"}
-	err := target.Install(svc, map[string]string{"TOKEN": "value"})
+	err := target.InstallWithScope(svc, map[string]string{"TOKEN": "value"}, ConfigScopeProject)
 	if err != nil {
 		t.Fatalf("expected install to succeed: %v", err)
 	}
@@ -470,7 +471,7 @@ func TestClaudeCodeTargetUninstallRemovesProjectScopedService(t *testing.T) {
 
 	writeTargetConfigFile(t, target.configPath, initialConfig)
 
-	err := target.Uninstall("service-a")
+	err := target.UninstallWithScope("service-a", ConfigScopeProject)
 	if err != nil {
 		t.Fatalf("expected uninstall to succeed: %v", err)
 	}
@@ -486,6 +487,70 @@ func TestClaudeCodeTargetUninstallRemovesProjectScopedService(t *testing.T) {
 
 	if _, ok := mcpServers["service-b"]; !ok {
 		t.Fatal("expected service-b to remain in project scoped mcpServers")
+	}
+}
+
+func TestClaudeCodeTargetInstallUsesUserScopeByDefault(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
+
+	target := newTestClaudeCodeTarget(t)
+
+	initialConfig := map[string]any{
+		"projects": map[string]any{
+			projectRoot: map[string]any{},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, initialConfig)
+
+	svc := service.Service{Name: "service-a", Transport: "sse", URL: "https://a.example.com"}
+	err := target.Install(svc, nil)
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	updatedConfig := readTargetConfigFile(t, target.configPath)
+	globalMCPServers := mustMapValue(t, updatedConfig["mcpServers"], "mcpServers")
+	if _, ok := globalMCPServers["service-a"]; !ok {
+		t.Fatal("expected service-a to be written in user/global mcpServers")
+	}
+
+	projects := mustMapValue(t, updatedConfig["projects"], "projects")
+	projectConfig := mustMapValue(t, projects[projectRoot], "projects.<cwd>")
+	if _, ok := projectConfig["mcpServers"]; ok {
+		t.Fatal("did not expect default install to write project scoped mcpServers")
+	}
+}
+
+func TestClaudeCodeTargetListWithScopeUserExcludesProjectEntries(t *testing.T) {
+	projectRoot := t.TempDir()
+	setWorkingDirectory(t, projectRoot)
+
+	target := newTestClaudeCodeTarget(t)
+
+	config := map[string]any{
+		"mcpServers": map[string]any{
+			"global-service": map[string]any{"type": "sse", "url": "https://global.example.com"},
+		},
+		"projects": map[string]any{
+			projectRoot: map[string]any{
+				"mcpServers": map[string]any{
+					"project-service": map[string]any{"type": "sse", "url": "https://project.example.com"},
+				},
+			},
+		},
+	}
+
+	writeTargetConfigFile(t, target.configPath, config)
+
+	services, err := target.ListWithScope(ConfigScopeUser)
+	if err != nil {
+		t.Fatalf("expected list with user scope to succeed: %v", err)
+	}
+
+	if len(services) != 1 || services[0] != "global-service" {
+		t.Fatalf("expected only global service in user scope, got %#v", services)
 	}
 }
 

@@ -15,16 +15,27 @@ func init() {
 }
 
 func newStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	var scopeValue string
+
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show service status across installed targets",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runStatusFlow(cmd.OutOrStdout())
+			scope, err := parseStatusScope(scopeValue)
+			if err != nil {
+				return err
+			}
+
+			return runStatusFlow(cmd.OutOrStdout(), scope)
 		},
 	}
+
+	cmd.Flags().StringVar(&scopeValue, "scope", string(target.ConfigScopeEffective), "Status scope for supported targets: effective, user, or project")
+
+	return cmd
 }
 
-func runStatusFlow(output io.Writer) error {
+func runStatusFlow(output io.Writer, scope target.ConfigScope) error {
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
@@ -32,11 +43,11 @@ func runStatusFlow(output io.Writer) error {
 
 	installedTargets := listInstalledTargets()
 	if len(installedTargets) == 0 {
-		printStatusNoTargets(output)
+		printStatusNoTargets(output, scope)
 		return nil
 	}
 
-	targetStatuses, err := listConfiguredServicesByTarget(installedTargets)
+	targetStatuses, err := listConfiguredServicesByTarget(installedTargets, scope)
 	if err != nil {
 		return err
 	}
@@ -48,19 +59,30 @@ func runStatusFlow(output io.Writer) error {
 	sort.Strings(serviceNames)
 
 	if len(serviceNames) == 0 {
-		printStatusNoServices(output)
+		printStatusNoServices(output, scope)
 		return nil
 	}
 
-	printStatusMatrix(output, serviceNames, installedTargets, targetStatuses)
+	printStatusMatrix(output, serviceNames, installedTargets, targetStatuses, scope)
 	return nil
 }
 
-func listConfiguredServicesByTarget(targetDefinitions []target.Target) (map[string]map[string]struct{}, error) {
+func listConfiguredServicesByTarget(targetDefinitions []target.Target, scope target.ConfigScope) (map[string]map[string]struct{}, error) {
 	targetStatuses := make(map[string]map[string]struct{}, len(targetDefinitions))
 
 	for _, targetDefinition := range targetDefinitions {
-		configuredServices, err := targetDefinition.List()
+		var (
+			configuredServices []string
+			err                error
+		)
+
+		scopedTarget, supportsScopes := targetDefinition.(target.ScopedTarget)
+		if supportsScopes && targetSupportsScope(targetDefinition, scope) {
+			configuredServices, err = scopedTarget.ListWithScope(scope)
+		} else {
+			configuredServices, err = targetDefinition.List()
+		}
+
 		if err != nil {
 			return nil, fmt.Errorf("list configured services for target %q: %w", targetDefinition.Slug(), err)
 		}
@@ -81,14 +103,14 @@ func listConfiguredServicesByTarget(targetDefinitions []target.Target) (map[stri
 	return targetStatuses, nil
 }
 
-func printStatusNoTargets(output io.Writer) {
-	fmt.Fprintln(output, "Status:")
+func printStatusNoTargets(output io.Writer, scope target.ConfigScope) {
+	fmt.Fprintf(output, "Status (%s scope):\n", scopeDescription(scope))
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "  (no installed targets found)")
 }
 
-func printStatusNoServices(output io.Writer) {
-	fmt.Fprintln(output, "Status:")
+func printStatusNoServices(output io.Writer, scope target.ConfigScope) {
+	fmt.Fprintf(output, "Status (%s scope):\n", scopeDescription(scope))
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "  (no services found)")
 }
@@ -98,6 +120,7 @@ func printStatusMatrix(
 	serviceNames []string,
 	targetDefinitions []target.Target,
 	targetStatuses map[string]map[string]struct{},
+	scope target.ConfigScope,
 ) {
 	sortedTargets := make([]target.Target, len(targetDefinitions))
 	copy(sortedTargets, targetDefinitions)
@@ -122,7 +145,7 @@ func printStatusMatrix(
 		targetColumnWidths[i] = columnWidth
 	}
 
-	fmt.Fprintln(output, "Status:")
+	fmt.Fprintf(output, "Status (%s scope):\n", scopeDescription(scope))
 	fmt.Fprintln(output)
 
 	fmt.Fprintf(output, "  %-*s", serviceColumnWidth, "service")

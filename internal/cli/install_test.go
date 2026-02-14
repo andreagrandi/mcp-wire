@@ -30,6 +30,12 @@ type fakeAuthInstallTarget struct {
 	lastAuthService string
 }
 
+type fakeScopedInstallTarget struct {
+	*fakeInstallTarget
+	installWithScopeCalls int
+	lastScope             targetpkg.ConfigScope
+}
+
 func (t *fakeInstallTarget) Name() string {
 	return t.name
 }
@@ -61,6 +67,24 @@ func (t *fakeAuthInstallTarget) Authenticate(serviceName string, _ io.Reader, _ 
 	t.authCalls++
 	t.lastAuthService = serviceName
 	return t.authErr
+}
+
+func (t *fakeScopedInstallTarget) SupportedScopes() []targetpkg.ConfigScope {
+	return []targetpkg.ConfigScope{targetpkg.ConfigScopeUser, targetpkg.ConfigScopeProject, targetpkg.ConfigScopeEffective}
+}
+
+func (t *fakeScopedInstallTarget) InstallWithScope(svc service.Service, resolvedEnv map[string]string, scope targetpkg.ConfigScope) error {
+	t.installWithScopeCalls++
+	t.lastScope = scope
+	return t.fakeInstallTarget.Install(svc, resolvedEnv)
+}
+
+func (t *fakeScopedInstallTarget) UninstallWithScope(_ string, _ targetpkg.ConfigScope) error {
+	return nil
+}
+
+func (t *fakeScopedInstallTarget) ListWithScope(_ targetpkg.ConfigScope) ([]string, error) {
+	return []string{}, nil
 }
 
 type testCredentialSource struct {
@@ -539,6 +563,97 @@ func TestInstallCommandKeepsGenericOAuthHintForOtherUnsupportedTargets(t *testin
 
 	if !strings.Contains(output, "Other CLI: authentication skipped (automatic OAuth is not supported by this target)") {
 		t.Fatalf("expected generic OAuth skip output, got %q", output)
+	}
+}
+
+func TestInstallCommandUsesProjectScopeForScopedTargets(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	scopedTarget := &fakeScopedInstallTarget{
+		fakeInstallTarget: &fakeInstallTarget{name: "Claude Code", slug: "claude", installed: true},
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:      "demo-service",
+				Transport: "sse",
+				URL:       "https://example.com/mcp",
+			},
+		}, nil
+	}
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "claude" {
+			return scopedTarget, true
+		}
+
+		return nil, false
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommand(t, "demo-service", "--target", "claude", "--scope", "project", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected install with project scope to succeed: %v", err)
+	}
+
+	if scopedTarget.installWithScopeCalls != 1 {
+		t.Fatalf("expected InstallWithScope to be used once, got %d", scopedTarget.installWithScopeCalls)
+	}
+
+	if scopedTarget.lastScope != targetpkg.ConfigScopeProject {
+		t.Fatalf("expected project scope, got %q", scopedTarget.lastScope)
+	}
+
+	if !strings.Contains(output, "Claude Code: configured") {
+		t.Fatalf("expected configured output, got %q", output)
+	}
+}
+
+func TestInstallWizardPromptsForScopeOnScopedTargets(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	scopedTarget := &fakeScopedInstallTarget{
+		fakeInstallTarget: &fakeInstallTarget{name: "Claude Code", slug: "claude", installed: true},
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:        "demo-service",
+				Description: "Demo service",
+				Transport:   "sse",
+				URL:         "https://example.com/mcp",
+			},
+		}, nil
+	}
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{scopedTarget}
+	}
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommandWithInput(t, "\n1\n1\n2\n\n", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected interactive install to succeed: %v", err)
+	}
+
+	if scopedTarget.installWithScopeCalls != 1 {
+		t.Fatalf("expected InstallWithScope to be used once, got %d", scopedTarget.installWithScopeCalls)
+	}
+
+	if scopedTarget.lastScope != targetpkg.ConfigScopeProject {
+		t.Fatalf("expected project scope from prompt, got %q", scopedTarget.lastScope)
+	}
+
+	if !strings.Contains(output, "Scope (supported targets): project") {
+		t.Fatalf("expected scope summary in review output, got %q", output)
+	}
+
+	if !strings.Contains(output, "mcp-wire install demo-service --target claude --scope project") {
+		t.Fatalf("expected equivalent command with project scope, got %q", output)
 	}
 }
 

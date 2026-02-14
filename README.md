@@ -61,6 +61,21 @@ Quick checks:
 ```bash
 mcp-wire status
 mcp-wire list services
+mcp-wire status --scope effective
+```
+
+### Scope-aware installs (Claude Code)
+
+For targets that support scopes (currently Claude Code), you can choose where MCP config is written:
+
+- `user` (default): available across projects
+- `project`: only for the current project
+
+```bash
+mcp-wire install jira --target claude --scope user
+mcp-wire install jira --target claude --scope project
+mcp-wire uninstall jira --target claude --scope project
+mcp-wire status --scope project
 ```
 
 ## Supported Targets

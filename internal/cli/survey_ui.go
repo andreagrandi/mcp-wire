@@ -61,18 +61,18 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 
 		switch choice {
 		case "Install service":
-			if err := runInstallWizardSurvey(cmd, nil, false); err != nil {
+			if err := runInstallWizardSurvey(cmd, nil, false, targetpkg.ConfigScopeUser, false); err != nil {
 				return err
 			}
 			showMenuSpacing = true
 		case "Uninstall service":
-			if err := runUninstallWizardSurvey(cmd, nil); err != nil {
+			if err := runUninstallWizardSurvey(cmd, nil, targetpkg.ConfigScopeUser, false); err != nil {
 				return err
 			}
 			showMenuSpacing = true
 		case "Status":
 			fmt.Fprintln(cmd.OutOrStdout())
-			if err := runStatusFlow(cmd.OutOrStdout()); err != nil {
+			if err := runStatusFlow(cmd.OutOrStdout(), targetpkg.ConfigScopeEffective); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout())
@@ -99,7 +99,13 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 	}
 }
 
-func runInstallWizardSurvey(cmd *cobra.Command, targetSlugs []string, noPrompt bool) error {
+func runInstallWizardSurvey(
+	cmd *cobra.Command,
+	targetSlugs []string,
+	noPrompt bool,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
 	output := cmd.OutOrStdout()
 
 	fmt.Fprintln(output, "Install Wizard")
@@ -138,11 +144,27 @@ serviceStep:
 				return err
 			}
 
+			selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Install")
+			if err != nil {
+				if errors.Is(err, errWizardBack) {
+					if len(targetSlugs) > 0 {
+						continue serviceStep
+					}
+
+					continue targetStep
+				}
+
+				return err
+			}
+
 			for {
 				fmt.Fprintln(output)
 				fmt.Fprintln(output, "Step 3/4: Review")
 				fmt.Fprintf(output, "Service: %s\n", svc.Name)
 				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+				if anyTargetSupportsProjectScope(targetDefinitions) {
+					fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
+				}
 				credentialMode := "prompt as needed"
 				if noPrompt {
 					credentialMode = "existing values only"
@@ -178,18 +200,23 @@ serviceStep:
 				fmt.Fprintln(output)
 				fmt.Fprintln(output, "Step 4/4: Apply")
 
-				if err := executeInstall(cmd, svc, targetDefinitions, noPrompt); err != nil {
+				if err := executeInstall(cmd, svc, targetDefinitions, noPrompt, selectedScope); err != nil {
 					return err
 				}
 
-				printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions))
+				printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions, selectedScope))
 				return nil
 			}
 		}
 	}
 }
 
-func runUninstallWizardSurvey(cmd *cobra.Command, targetSlugs []string) error {
+func runUninstallWizardSurvey(
+	cmd *cobra.Command,
+	targetSlugs []string,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
 	output := cmd.OutOrStdout()
 
 	fmt.Fprintln(output, "Uninstall Wizard")
@@ -228,11 +255,27 @@ serviceStep:
 				return err
 			}
 
+			selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Uninstall")
+			if err != nil {
+				if errors.Is(err, errWizardBack) {
+					if len(targetSlugs) > 0 {
+						continue serviceStep
+					}
+
+					continue targetStep
+				}
+
+				return err
+			}
+
 			for {
 				fmt.Fprintln(output)
 				fmt.Fprintln(output, "Step 3/4: Review")
 				fmt.Fprintf(output, "Service: %s\n", svc.Name)
 				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+				if anyTargetSupportsProjectScope(targetDefinitions) {
+					fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
+				}
 
 				confirmChoice := ""
 				printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
@@ -267,7 +310,14 @@ serviceStep:
 
 				uninstallErrors := make([]error, 0)
 				for _, targetDefinition := range targetDefinitions {
-					err := targetDefinition.Uninstall(svc.Name)
+					var err error
+					scopedTarget, supportsScopes := targetDefinition.(targetpkg.ScopedTarget)
+					if supportsScopes && targetSupportsScope(targetDefinition, selectedScope) {
+						err = scopedTarget.UninstallWithScope(svc.Name, selectedScope)
+					} else {
+						err = targetDefinition.Uninstall(svc.Name)
+					}
+
 					if err != nil {
 						fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
 						uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
@@ -285,11 +335,46 @@ serviceStep:
 					return err
 				}
 
-				printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
+				printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions, selectedScope))
 				return nil
 			}
 		}
 	}
+}
+
+func resolveScopeForSurveyWizard(
+	cmd *cobra.Command,
+	targetDefinitions []targetpkg.Target,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+	action string,
+) (targetpkg.ConfigScope, error) {
+	if !anyTargetSupportsProjectScope(targetDefinitions) {
+		return targetpkg.ConfigScopeUser, nil
+	}
+
+	if scopeSet {
+		return requestedScope, nil
+	}
+
+	printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc goes back.")
+	selection := ""
+	prompt := &survey.Select{
+		Message:  fmt.Sprintf("%s scope (supported targets)", action),
+		Options:  []string{"User (global)", "Project (current directory)"},
+		Default:  "User (global)",
+		PageSize: 2,
+	}
+
+	if err := askSurveyPrompt(cmd, prompt, &selection); err != nil {
+		return "", fmt.Errorf("read scope selection: %w", err)
+	}
+
+	if selection == "Project (current directory)" {
+		return targetpkg.ConfigScopeProject, nil
+	}
+
+	return targetpkg.ConfigScopeUser, nil
 }
 
 func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service) (service.Service, error) {

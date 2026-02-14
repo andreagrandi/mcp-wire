@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/andreagrandi/mcp-wire/internal/app"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
 )
 
@@ -70,7 +71,7 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 			fmt.Fprintln(output)
 		case "3", "status":
 			fmt.Fprintln(output)
-			if err := runStatusFlow(output); err != nil {
+			if err := runStatusFlow(output, targetpkg.ConfigScopeEffective); err != nil {
 				return err
 			}
 			fmt.Fprintln(output)

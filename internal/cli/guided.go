@@ -15,13 +15,35 @@ import (
 
 func runInstallWizard(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string, noPrompt bool) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runInstallWizardSurvey(cmd, targetSlugs, noPrompt)
+		return runInstallWizardSurvey(cmd, targetSlugs, noPrompt, targetpkg.ConfigScopeUser, false)
 	}
 
-	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt)
+	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt, targetpkg.ConfigScopeUser, false)
 }
 
-func runInstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string, noPrompt bool) error {
+func runInstallWizardWithScope(
+	cmd *cobra.Command,
+	reader *bufio.Reader,
+	targetSlugs []string,
+	noPrompt bool,
+	scope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
+	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
+		return runInstallWizardSurvey(cmd, targetSlugs, noPrompt, scope, scopeSet)
+	}
+
+	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt, scope, scopeSet)
+}
+
+func runInstallWizardPlain(
+	cmd *cobra.Command,
+	reader *bufio.Reader,
+	targetSlugs []string,
+	noPrompt bool,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
 	output := cmd.OutOrStdout()
 	fmt.Fprintln(output, "Install Wizard")
 	fmt.Fprintln(output)
@@ -45,7 +67,12 @@ func runInstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlugs
 		return err
 	}
 
-	confirmed, err := confirmInstallSelection(output, reader, svc, targetDefinitions, noPrompt)
+	selectedScope, err := resolveScopeForPlainWizard(output, reader, targetDefinitions, requestedScope, scopeSet, "Install")
+	if err != nil {
+		return err
+	}
+
+	confirmed, err := confirmInstallSelection(output, reader, svc, targetDefinitions, noPrompt, selectedScope)
 	if err != nil {
 		return err
 	}
@@ -57,23 +84,43 @@ func runInstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlugs
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 4/4: Apply")
 
-	if err := executeInstall(cmd, svc, targetDefinitions, noPrompt); err != nil {
+	if err := executeInstall(cmd, svc, targetDefinitions, noPrompt, selectedScope); err != nil {
 		return err
 	}
 
-	printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions))
+	printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions, selectedScope))
 	return nil
 }
 
 func runUninstallWizard(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runUninstallWizardSurvey(cmd, targetSlugs)
+		return runUninstallWizardSurvey(cmd, targetSlugs, targetpkg.ConfigScopeUser, false)
 	}
 
-	return runUninstallWizardPlain(cmd, reader, targetSlugs)
+	return runUninstallWizardPlain(cmd, reader, targetSlugs, targetpkg.ConfigScopeUser, false)
 }
 
-func runUninstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string) error {
+func runUninstallWizardWithScope(
+	cmd *cobra.Command,
+	reader *bufio.Reader,
+	targetSlugs []string,
+	scope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
+	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
+		return runUninstallWizardSurvey(cmd, targetSlugs, scope, scopeSet)
+	}
+
+	return runUninstallWizardPlain(cmd, reader, targetSlugs, scope, scopeSet)
+}
+
+func runUninstallWizardPlain(
+	cmd *cobra.Command,
+	reader *bufio.Reader,
+	targetSlugs []string,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+) error {
 	output := cmd.OutOrStdout()
 	fmt.Fprintln(output, "Uninstall Wizard")
 	fmt.Fprintln(output)
@@ -97,7 +144,12 @@ func runUninstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlu
 		return err
 	}
 
-	confirmed, err := confirmUninstallSelection(output, reader, svc, targetDefinitions)
+	selectedScope, err := resolveScopeForPlainWizard(output, reader, targetDefinitions, requestedScope, scopeSet, "Uninstall")
+	if err != nil {
+		return err
+	}
+
+	confirmed, err := confirmUninstallSelection(output, reader, svc, targetDefinitions, selectedScope)
 	if err != nil {
 		return err
 	}
@@ -113,7 +165,14 @@ func runUninstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlu
 
 	uninstallErrors := make([]error, 0)
 	for _, targetDefinition := range targetDefinitions {
-		err := targetDefinition.Uninstall(svc.Name)
+		var err error
+		scopedTarget, supportsScopes := targetDefinition.(targetpkg.ScopedTarget)
+		if supportsScopes && targetSupportsScope(targetDefinition, selectedScope) {
+			err = scopedTarget.UninstallWithScope(svc.Name, selectedScope)
+		} else {
+			err = targetDefinition.Uninstall(svc.Name)
+		}
+
 		if err != nil {
 			fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
 			uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
@@ -131,7 +190,7 @@ func runUninstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlu
 		return err
 	}
 
-	printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
+	printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions, selectedScope))
 	return nil
 }
 
@@ -326,7 +385,14 @@ func parseTargetSelection(input string, targets []targetpkg.Target) ([]targetpkg
 	return selected, nil
 }
 
-func confirmInstallSelection(output ioWriter, reader *bufio.Reader, svc service.Service, targetDefinitions []targetpkg.Target, noPrompt bool) (bool, error) {
+func confirmInstallSelection(
+	output ioWriter,
+	reader *bufio.Reader,
+	svc service.Service,
+	targetDefinitions []targetpkg.Target,
+	noPrompt bool,
+	scope targetpkg.ConfigScope,
+) (bool, error) {
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 3/4: Review")
 	fmt.Fprintf(output, "Service: %s\n", svc.Name)
@@ -336,6 +402,9 @@ func confirmInstallSelection(output ioWriter, reader *bufio.Reader, svc service.
 		credentialMode = "existing values only"
 	}
 	fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
+	if anyTargetSupportsProjectScope(targetDefinitions) {
+		fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(scope))
+	}
 
 	confirmed, err := askYesNo(reader, output, "Apply changes? [Y/n]: ", true)
 	if err != nil {
@@ -345,11 +414,20 @@ func confirmInstallSelection(output ioWriter, reader *bufio.Reader, svc service.
 	return confirmed, nil
 }
 
-func confirmUninstallSelection(output ioWriter, reader *bufio.Reader, svc service.Service, targetDefinitions []targetpkg.Target) (bool, error) {
+func confirmUninstallSelection(
+	output ioWriter,
+	reader *bufio.Reader,
+	svc service.Service,
+	targetDefinitions []targetpkg.Target,
+	scope targetpkg.ConfigScope,
+) (bool, error) {
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 3/4: Review")
 	fmt.Fprintf(output, "Service: %s\n", svc.Name)
 	fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+	if anyTargetSupportsProjectScope(targetDefinitions) {
+		fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(scope))
+	}
 
 	confirmed, err := askYesNo(reader, output, "Apply changes? [Y/n]: ", true)
 	if err != nil {
@@ -368,20 +446,60 @@ func targetDisplayNames(targetDefinitions []targetpkg.Target) string {
 	return strings.Join(names, ", ")
 }
 
-func buildEquivalentInstallCommand(serviceName string, targetDefinitions []targetpkg.Target) string {
+func buildEquivalentInstallCommand(serviceName string, targetDefinitions []targetpkg.Target, scope targetpkg.ConfigScope) string {
 	command := "mcp-wire install " + serviceName
 	for _, targetDefinition := range targetDefinitions {
 		command += " --target " + targetDefinition.Slug()
+	}
+	if scope == targetpkg.ConfigScopeProject {
+		command += " --scope project"
 	}
 
 	return command
 }
 
-func buildEquivalentUninstallCommand(serviceName string, targetDefinitions []targetpkg.Target) string {
+func buildEquivalentUninstallCommand(serviceName string, targetDefinitions []targetpkg.Target, scope targetpkg.ConfigScope) string {
 	command := "mcp-wire uninstall " + serviceName
 	for _, targetDefinition := range targetDefinitions {
 		command += " --target " + targetDefinition.Slug()
 	}
+	if scope == targetpkg.ConfigScopeProject {
+		command += " --scope project"
+	}
 
 	return command
+}
+
+func resolveScopeForPlainWizard(
+	output ioWriter,
+	reader *bufio.Reader,
+	targetDefinitions []targetpkg.Target,
+	requestedScope targetpkg.ConfigScope,
+	scopeSet bool,
+	action string,
+) (targetpkg.ConfigScope, error) {
+	if !anyTargetSupportsProjectScope(targetDefinitions) {
+		return targetpkg.ConfigScopeUser, nil
+	}
+
+	if scopeSet {
+		return requestedScope, nil
+	}
+
+	for {
+		prompt := fmt.Sprintf("%s scope for supported targets [1=user, 2=project, Enter=user]: ", action)
+		selection, err := readTrimmedLine(reader, output, prompt)
+		if err != nil {
+			return "", fmt.Errorf("read scope selection: %w", err)
+		}
+
+		switch strings.ToLower(strings.TrimSpace(selection)) {
+		case "", "1", "user":
+			return targetpkg.ConfigScopeUser, nil
+		case "2", "project":
+			return targetpkg.ConfigScopeProject, nil
+		default:
+			fmt.Fprintln(output, "Invalid selection. Choose 1 (user) or 2 (project).")
+		}
+	}
 }

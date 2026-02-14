@@ -18,6 +18,15 @@ type fakeStatusTarget struct {
 	listErr   error
 }
 
+type fakeScopedStatusTarget struct {
+	name            string
+	slug            string
+	installed       bool
+	listErr         error
+	servicesByScope map[targetpkg.ConfigScope][]string
+	lastScope       targetpkg.ConfigScope
+}
+
 func (t fakeStatusTarget) Name() string {
 	return t.name
 }
@@ -48,6 +57,57 @@ func (t fakeStatusTarget) List() ([]string, error) {
 	return copyValues, nil
 }
 
+func (t *fakeScopedStatusTarget) Name() string {
+	return t.name
+}
+
+func (t *fakeScopedStatusTarget) Slug() string {
+	return t.slug
+}
+
+func (t *fakeScopedStatusTarget) IsInstalled() bool {
+	return t.installed
+}
+
+func (t *fakeScopedStatusTarget) Install(_ service.Service, _ map[string]string) error {
+	return nil
+}
+
+func (t *fakeScopedStatusTarget) Uninstall(_ string) error {
+	return nil
+}
+
+func (t *fakeScopedStatusTarget) List() ([]string, error) {
+	values := t.servicesByScope[targetpkg.ConfigScopeEffective]
+	copyValues := make([]string, len(values))
+	copy(copyValues, values)
+	return copyValues, t.listErr
+}
+
+func (t *fakeScopedStatusTarget) SupportedScopes() []targetpkg.ConfigScope {
+	return []targetpkg.ConfigScope{targetpkg.ConfigScopeUser, targetpkg.ConfigScopeProject, targetpkg.ConfigScopeEffective}
+}
+
+func (t *fakeScopedStatusTarget) InstallWithScope(_ service.Service, _ map[string]string, _ targetpkg.ConfigScope) error {
+	return nil
+}
+
+func (t *fakeScopedStatusTarget) UninstallWithScope(_ string, _ targetpkg.ConfigScope) error {
+	return nil
+}
+
+func (t *fakeScopedStatusTarget) ListWithScope(scope targetpkg.ConfigScope) ([]string, error) {
+	t.lastScope = scope
+	if t.listErr != nil {
+		return nil, t.listErr
+	}
+
+	values := t.servicesByScope[scope]
+	copyValues := make([]string, len(values))
+	copy(copyValues, values)
+	return copyValues, nil
+}
+
 func TestStatusCommandPrintsServiceTargetMatrix(t *testing.T) {
 	restore := overrideStatusDependencies(t)
 	defer restore()
@@ -72,7 +132,7 @@ func TestStatusCommandPrintsServiceTargetMatrix(t *testing.T) {
 		t.Fatalf("expected status command to succeed: %v", err)
 	}
 
-	if !strings.Contains(output, "Status:") {
+	if !strings.Contains(output, "Status (") {
 		t.Fatalf("expected status heading, got %q", output)
 	}
 
@@ -170,6 +230,62 @@ func TestStatusCommandReturnsTargetListError(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "target \"alpha\"") {
 		t.Fatalf("expected target-specific error, got %v", err)
+	}
+}
+
+func TestStatusCommandUsesScopeAwareListWhenScopeIsRequested(t *testing.T) {
+	restore := overrideStatusDependencies(t)
+	defer restore()
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"service-a": {Name: "service-a", Transport: "sse", URL: "https://example.com/a"},
+			"service-b": {Name: "service-b", Transport: "sse", URL: "https://example.com/b"},
+		}, nil
+	}
+
+	scopedTarget := &fakeScopedStatusTarget{
+		name:      "Claude Code",
+		slug:      "claude",
+		installed: true,
+		servicesByScope: map[targetpkg.ConfigScope][]string{
+			targetpkg.ConfigScopeEffective: {"service-a", "service-b"},
+			targetpkg.ConfigScopeProject:   {"service-b"},
+		},
+	}
+
+	listInstalledTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{scopedTarget}
+	}
+
+	output, err := executeRootCommand(t, "status", "--scope", "project")
+	if err != nil {
+		t.Fatalf("expected status command with project scope to succeed: %v", err)
+	}
+
+	if scopedTarget.lastScope != targetpkg.ConfigScopeProject {
+		t.Fatalf("expected project scope to be used, got %q", scopedTarget.lastScope)
+	}
+
+	assertLineMatches(t, output, `(?m)^\s*service-a\s+no\s*$`)
+	assertLineMatches(t, output, `(?m)^\s*service-b\s+yes\s*$`)
+}
+
+func TestStatusCommandRejectsInvalidScope(t *testing.T) {
+	restore := overrideStatusDependencies(t)
+	defer restore()
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{}, nil
+	}
+
+	_, err := executeRootCommand(t, "status", "--scope", "invalid")
+	if err == nil {
+		t.Fatal("expected status command to fail for invalid scope")
+	}
+
+	if !strings.Contains(err.Error(), "invalid scope") {
+		t.Fatalf("expected invalid scope error, got %v", err)
 	}
 }
 

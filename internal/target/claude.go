@@ -81,6 +81,16 @@ func (t *ClaudeCodeTarget) IsInstalled() bool {
 
 // Install writes or updates the service configuration in the target config.
 func (t *ClaudeCodeTarget) Install(svc service.Service, resolvedEnv map[string]string) error {
+	return t.InstallWithScope(svc, resolvedEnv, ConfigScopeUser)
+}
+
+// SupportedScopes returns the scopes supported by Claude Code target operations.
+func (t *ClaudeCodeTarget) SupportedScopes() []ConfigScope {
+	return []ConfigScope{ConfigScopeUser, ConfigScopeProject, ConfigScopeEffective}
+}
+
+// InstallWithScope writes or updates the service configuration in the requested scope.
+func (t *ClaudeCodeTarget) InstallWithScope(svc service.Service, resolvedEnv map[string]string, scope ConfigScope) error {
 	serviceName := strings.TrimSpace(svc.Name)
 	if serviceName == "" {
 		return errors.New("service name is required")
@@ -91,7 +101,7 @@ func (t *ClaudeCodeTarget) Install(svc service.Service, resolvedEnv map[string]s
 		return err
 	}
 
-	mcpServers, err := getMCPServers(config, true)
+	mcpServers, err := getMCPServers(config, scope, true)
 	if err != nil {
 		return err
 	}
@@ -108,6 +118,11 @@ func (t *ClaudeCodeTarget) Install(svc service.Service, resolvedEnv map[string]s
 
 // Uninstall removes a service from the target config.
 func (t *ClaudeCodeTarget) Uninstall(serviceName string) error {
+	return t.UninstallWithScope(serviceName, ConfigScopeUser)
+}
+
+// UninstallWithScope removes a service from the requested scope.
+func (t *ClaudeCodeTarget) UninstallWithScope(serviceName string, scope ConfigScope) error {
 	trimmedServiceName := strings.TrimSpace(serviceName)
 	if trimmedServiceName == "" {
 		return errors.New("service name is required")
@@ -122,7 +137,7 @@ func (t *ClaudeCodeTarget) Uninstall(serviceName string) error {
 		return nil
 	}
 
-	mcpServers, err := getMCPServers(config, false)
+	mcpServers, err := getMCPServers(config, scope, false)
 	if err != nil {
 		return err
 	}
@@ -138,6 +153,11 @@ func (t *ClaudeCodeTarget) Uninstall(serviceName string) error {
 
 // List returns configured service names from the target config.
 func (t *ClaudeCodeTarget) List() ([]string, error) {
+	return t.ListWithScope(ConfigScopeEffective)
+}
+
+// ListWithScope returns configured service names from the requested scope.
+func (t *ClaudeCodeTarget) ListWithScope(scope ConfigScope) ([]string, error) {
 	config, exists, err := t.readConfig()
 	if err != nil {
 		return nil, err
@@ -147,7 +167,47 @@ func (t *ClaudeCodeTarget) List() ([]string, error) {
 		return []string{}, nil
 	}
 
-	return collectClaudeMCPServerNames(config)
+	serviceNames := make(map[string]struct{})
+
+	switch scope {
+	case ConfigScopeUser:
+		if err := collectClaudeMCPServerNamesFromScope(config, serviceNames, "mcpServers"); err != nil {
+			return nil, err
+		}
+	case ConfigScopeProject:
+		projectMCPServers, err := getClaudeProjectMCPServers(config, false)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := collectClaudeMCPServerNamesFromMCPServers(projectMCPServers, serviceNames); err != nil {
+			return nil, err
+		}
+	case ConfigScopeEffective:
+		if err := collectClaudeMCPServerNamesFromScope(config, serviceNames, "mcpServers"); err != nil {
+			return nil, err
+		}
+
+		projectMCPServers, err := getClaudeProjectMCPServers(config, false)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := collectClaudeMCPServerNamesFromMCPServers(projectMCPServers, serviceNames); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported scope %q", scope)
+	}
+
+	services := make([]string, 0, len(serviceNames))
+	for serviceName := range serviceNames {
+		services = append(services, serviceName)
+	}
+
+	sort.Strings(services)
+
+	return services, nil
 }
 
 func (t *ClaudeCodeTarget) readConfig() (map[string]any, bool, error) {
@@ -260,16 +320,18 @@ func isExecutableFilePath(path string, statPath func(name string) (os.FileInfo, 
 	return info.Mode().Perm()&0o111 != 0
 }
 
-func getMCPServers(config map[string]any, createIfMissing bool) (map[string]any, error) {
-	projectMCPServers, err := getClaudeProjectMCPServers(config, createIfMissing)
-	if err != nil {
-		return nil, err
+func getMCPServers(config map[string]any, scope ConfigScope, createIfMissing bool) (map[string]any, error) {
+	switch scope {
+	case ConfigScopeUser:
+		return getClaudeUserMCPServers(config, createIfMissing)
+	case ConfigScopeProject:
+		return getClaudeProjectMCPServers(config, createIfMissing)
+	default:
+		return nil, fmt.Errorf("unsupported scope %q", scope)
 	}
+}
 
-	if projectMCPServers != nil {
-		return projectMCPServers, nil
-	}
-
+func getClaudeUserMCPServers(config map[string]any, createIfMissing bool) (map[string]any, error) {
 	rawMCPServers, exists := config["mcpServers"]
 	if !exists || rawMCPServers == nil {
 		if !createIfMissing {
@@ -290,42 +352,6 @@ func getMCPServers(config map[string]any, createIfMissing bool) (map[string]any,
 	return mcpServers, nil
 }
 
-func collectClaudeMCPServerNames(config map[string]any) ([]string, error) {
-	serviceNames := make(map[string]struct{})
-
-	if err := collectClaudeMCPServerNamesFromScope(config, serviceNames, "mcpServers"); err != nil {
-		return nil, err
-	}
-
-	rawProjects, hasProjects := config["projects"]
-	if hasProjects && rawProjects != nil {
-		projects, ok := rawProjects.(map[string]any)
-		if !ok {
-			return nil, errors.New("invalid config: projects must be an object")
-		}
-
-		for projectKey, rawProjectConfig := range projects {
-			projectConfig, ok := rawProjectConfig.(map[string]any)
-			if !ok {
-				return nil, fmt.Errorf("invalid config: projects[%q] must be an object", projectKey)
-			}
-
-			if err := collectClaudeMCPServerNamesFromScope(projectConfig, serviceNames, fmt.Sprintf("projects[%q].mcpServers", projectKey)); err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	services := make([]string, 0, len(serviceNames))
-	for serviceName := range serviceNames {
-		services = append(services, serviceName)
-	}
-
-	sort.Strings(services)
-
-	return services, nil
-}
-
 func collectClaudeMCPServerNamesFromScope(scope map[string]any, serviceNames map[string]struct{}, label string) error {
 	rawMCPServers, exists := scope["mcpServers"]
 	if !exists || rawMCPServers == nil {
@@ -335,6 +361,23 @@ func collectClaudeMCPServerNamesFromScope(scope map[string]any, serviceNames map
 	mcpServers, ok := rawMCPServers.(map[string]any)
 	if !ok {
 		return fmt.Errorf("invalid config: %s must be an object", label)
+	}
+
+	for serviceName := range mcpServers {
+		trimmedName := strings.TrimSpace(serviceName)
+		if trimmedName == "" {
+			continue
+		}
+
+		serviceNames[trimmedName] = struct{}{}
+	}
+
+	return nil
+}
+
+func collectClaudeMCPServerNamesFromMCPServers(mcpServers map[string]any, serviceNames map[string]struct{}) error {
+	if mcpServers == nil {
+		return nil
 	}
 
 	for serviceName := range mcpServers {

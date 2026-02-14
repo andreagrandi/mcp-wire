@@ -23,6 +23,12 @@ type fakeUninstallTarget struct {
 	lastService    string
 }
 
+type fakeScopedUninstallTarget struct {
+	*fakeUninstallTarget
+	uninstallWithScopeCalls int
+	lastScope               targetpkg.ConfigScope
+}
+
 func (t *fakeUninstallTarget) Name() string {
 	return t.name
 }
@@ -47,6 +53,25 @@ func (t *fakeUninstallTarget) Uninstall(serviceName string) error {
 
 func (t *fakeUninstallTarget) List() ([]string, error) {
 	return nil, nil
+}
+
+func (t *fakeScopedUninstallTarget) SupportedScopes() []targetpkg.ConfigScope {
+	return []targetpkg.ConfigScope{targetpkg.ConfigScopeUser, targetpkg.ConfigScopeProject, targetpkg.ConfigScopeEffective}
+}
+
+func (t *fakeScopedUninstallTarget) InstallWithScope(_ service.Service, _ map[string]string, _ targetpkg.ConfigScope) error {
+	return nil
+}
+
+func (t *fakeScopedUninstallTarget) UninstallWithScope(serviceName string, scope targetpkg.ConfigScope) error {
+	t.uninstallWithScopeCalls++
+	t.lastService = serviceName
+	t.lastScope = scope
+	return t.uninstallErr
+}
+
+func (t *fakeScopedUninstallTarget) ListWithScope(_ targetpkg.ConfigScope) ([]string, error) {
+	return []string{}, nil
 }
 
 func TestUninstallCommandUninstallsFromAllInstalledTargetsByDefault(t *testing.T) {
@@ -103,6 +128,84 @@ func TestUninstallCommandUsesSelectedTargets(t *testing.T) {
 
 	if selected.uninstallCalls != 1 {
 		t.Fatalf("expected selected target to uninstall once, got %d", selected.uninstallCalls)
+	}
+}
+
+func TestUninstallCommandUsesProjectScopeForScopedTargets(t *testing.T) {
+	restore := overrideUninstallCommandDependencies(t)
+	defer restore()
+
+	scoped := &fakeScopedUninstallTarget{
+		fakeUninstallTarget: &fakeUninstallTarget{name: "Claude Code", slug: "claude", installed: true},
+	}
+
+	lookupTarget = func(slug string) (targetpkg.Target, bool) {
+		if slug == "claude" {
+			return scoped, true
+		}
+
+		return nil, false
+	}
+
+	_, err := executeUninstallCommand(t, "demo-service", "--target", "claude", "--scope", "project")
+	if err != nil {
+		t.Fatalf("expected uninstall with project scope to succeed: %v", err)
+	}
+
+	if scoped.uninstallWithScopeCalls != 1 {
+		t.Fatalf("expected UninstallWithScope to be called once, got %d", scoped.uninstallWithScopeCalls)
+	}
+
+	if scoped.lastScope != targetpkg.ConfigScopeProject {
+		t.Fatalf("expected project scope, got %q", scoped.lastScope)
+	}
+
+	if scoped.uninstallCalls != 0 {
+		t.Fatalf("did not expect fallback Uninstall to be called, got %d", scoped.uninstallCalls)
+	}
+}
+
+func TestUninstallWizardPromptsForScopeOnScopedTargets(t *testing.T) {
+	restore := overrideUninstallCommandDependencies(t)
+	defer restore()
+
+	scoped := &fakeScopedUninstallTarget{
+		fakeUninstallTarget: &fakeUninstallTarget{name: "Claude Code", slug: "claude", installed: true},
+	}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"demo-service": {
+				Name:        "demo-service",
+				Description: "Demo service",
+				Transport:   "sse",
+				URL:         "https://example.com/mcp",
+			},
+		}, nil
+	}
+	allTargets = func() []targetpkg.Target {
+		return []targetpkg.Target{scoped}
+	}
+
+	output, err := executeUninstallCommandWithInput(t, "\n1\n1\n2\n\n")
+	if err != nil {
+		t.Fatalf("expected interactive uninstall to succeed: %v", err)
+	}
+
+	if scoped.uninstallWithScopeCalls != 1 {
+		t.Fatalf("expected UninstallWithScope to be called once, got %d", scoped.uninstallWithScopeCalls)
+	}
+
+	if scoped.lastScope != targetpkg.ConfigScopeProject {
+		t.Fatalf("expected project scope from prompt, got %q", scoped.lastScope)
+	}
+
+	if !strings.Contains(output, "Scope (supported targets): project") {
+		t.Fatalf("expected scope summary in review output, got %q", output)
+	}
+
+	if !strings.Contains(output, "mcp-wire uninstall demo-service --target claude --scope project") {
+		t.Fatalf("expected equivalent command with project scope, got %q", output)
 	}
 }
 

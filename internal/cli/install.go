@@ -32,14 +32,22 @@ func init() {
 func newInstallCmd() *cobra.Command {
 	var targetSlugs []string
 	var noPrompt bool
+	var scopeValue string
 
 	cmd := &cobra.Command{
 		Use:   "install <service>",
 		Short: "Install a service into one or more targets",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			scope, err := parseInstallUninstallScope(scopeValue)
+			if err != nil {
+				return err
+			}
+
+			scopeSet := cmd.Flags().Changed("scope")
+
 			if len(args) == 0 {
-				return runInstallWizard(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs, noPrompt)
+				return runInstallWizardWithScope(cmd, bufio.NewReader(cmd.InOrStdin()), targetSlugs, noPrompt, scope, scopeSet)
 			}
 
 			requestedServiceName := strings.TrimSpace(args[0])
@@ -62,12 +70,13 @@ func newInstallCmd() *cobra.Command {
 				return err
 			}
 
-			return executeInstall(cmd, svc, targetDefinitions, noPrompt)
+			return executeInstall(cmd, svc, targetDefinitions, noPrompt, scope)
 		},
 	}
 
 	cmd.Flags().StringArrayVar(&targetSlugs, "target", nil, "Install to specific target slug(s); can be repeated")
 	cmd.Flags().BoolVar(&noPrompt, "no-prompt", false, "Fail when required credentials are missing instead of prompting")
+	cmd.Flags().StringVar(&scopeValue, "scope", string(target.ConfigScopeUser), "Config scope for supported targets: user or project")
 
 	return cmd
 }
@@ -158,7 +167,7 @@ func printInstallPlan(output io.Writer, targetDefinitions []target.Target) {
 	fmt.Fprintf(output, "Installing to: %s\n", strings.Join(names, ", "))
 }
 
-func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions []target.Target, noPrompt bool) error {
+func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions []target.Target, noPrompt bool, scope target.ConfigScope) error {
 	envSource := newCredentialEnvSource()
 	fileSource := newCredentialFileSource("")
 	resolver := newCredentialResolver(envSource, fileSource)
@@ -179,7 +188,14 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 	installErrors := make([]error, 0)
 	authenticationErrors := make([]error, 0)
 	for _, targetDefinition := range targetDefinitions {
-		err := targetDefinition.Install(svc, resolvedEnv)
+		var err error
+		scopedTarget, supportsScopes := targetDefinition.(target.ScopedTarget)
+		if supportsScopes && targetSupportsScope(targetDefinition, scope) {
+			err = scopedTarget.InstallWithScope(svc, resolvedEnv, scope)
+		} else {
+			err = targetDefinition.Install(svc, resolvedEnv)
+		}
+
 		if err != nil {
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s: failed (%v)\n", targetDefinition.Name(), err)
 			installErrors = append(installErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
