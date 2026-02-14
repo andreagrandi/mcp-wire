@@ -64,7 +64,7 @@ env: []
 
 ## Adding a new target
 
-Create a new file in `internal/target/` implementing the `Target` interface (Name, Slug, IsInstalled, Install, Uninstall, List). Register it in `AllTargets()` in `registry.go`. Follow the `claudecode.go` pattern — read JSON as `map[string]any`, modify, write back.
+Create a new file in `internal/target/` implementing the `Target` interface (Name, Slug, IsInstalled, Install, Uninstall, List). Register it in `AllTargets()` in `registry.go`. Follow the `claude.go` pattern — read JSON as `map[string]any`, modify, write back.
 
 ## Implementation plan
 

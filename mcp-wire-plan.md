@@ -40,7 +40,7 @@ mcp-wire/
 │   ├── target/
 │   │   ├── target.go            # Target interface definition
 │   │   ├── registry.go          # Target discovery (which are installed on this machine)
-│   │   ├── claudecode.go        # Claude Code target implementation
+│   │   ├── claude.go            # Claude Code target implementation
 │   │   └── codex.go             # Codex target implementation
 │   ├── credential/
 │   │   ├── resolver.go          # Credential resolution chain
@@ -146,7 +146,7 @@ type Target interface {
     // Name returns the human-readable name (e.g., "Claude Code")
     Name() string
 
-    // Slug returns the CLI-friendly identifier (e.g., "claudecode")
+    // Slug returns the CLI-friendly identifier (e.g., "claude")
     Slug() string
 
     // IsInstalled checks if this CLI tool is present on the system
@@ -186,7 +186,7 @@ Each target follows the same pattern: locate the config file, read it as JSON (p
 
 ### 2.1 — Claude Code Target
 
-Create `internal/target/claudecode.go`.
+Create `internal/target/claude.go`.
 
 Config file location: `~/.claude/settings.json` (global) or `.claude/settings.json` (project-local). Start with global only.
 
@@ -406,7 +406,7 @@ Output:
 ```
 Targets:
 
-  claudecode   Claude Code   ✓ installed
+  claude       Claude Code   ✓ installed
   codex        Codex CLI     ✓ installed
   geminicli    Gemini CLI    ✗ not found
   opencode     OpenCode      ✗ not found

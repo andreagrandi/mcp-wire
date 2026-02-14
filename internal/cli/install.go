@@ -248,7 +248,7 @@ func oauthManualAuthHint(targetDefinition target.Target) string {
 	targetSlug := strings.ToLower(strings.TrimSpace(targetDefinition.Slug()))
 
 	switch targetSlug {
-	case "claudecode":
+	case "claude":
 		return "complete OAuth in Claude Code with /mcp"
 	default:
 		return ""

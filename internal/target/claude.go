@@ -17,7 +17,7 @@ import (
 
 const (
 	claudeCodeBinaryName = "claude"
-	claudeCodeSlug       = "claudecode"
+	claudeCodeSlug       = "claude"
 )
 
 // ClaudeCodeTarget manages MCP service configuration for Claude Code.
@@ -35,7 +35,7 @@ func NewClaudeCodeTarget() *ClaudeCodeTarget {
 		configPath:          defaultClaudeCodeConfigPath(),
 		lookPath:            exec.LookPath,
 		statPath:            os.Stat,
-		binaryNames:         []string{claudeCodeBinaryName, "claude-code", "claudecode"},
+		binaryNames:         []string{claudeCodeBinaryName, "claude-code"},
 		fallbackBinaryPaths: defaultClaudeCodeFallbackBinaryPaths(),
 	}
 }

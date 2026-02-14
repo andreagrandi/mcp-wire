@@ -468,7 +468,7 @@ func TestInstallCommandPrintsClaudeOAuthHintWhenAutoAuthIsUnsupported(t *testing
 	restore := overrideInstallCommandDependencies(t)
 	defer restore()
 
-	claudeTarget := &fakeInstallTarget{name: "Claude Code", slug: "claudecode", installed: true}
+	claudeTarget := &fakeInstallTarget{name: "Claude Code", slug: "claude", installed: true}
 
 	loadServices = func(_ ...string) (map[string]service.Service, error) {
 		return map[string]service.Service{
@@ -481,7 +481,7 @@ func TestInstallCommandPrintsClaudeOAuthHintWhenAutoAuthIsUnsupported(t *testing
 		}, nil
 	}
 	lookupTarget = func(slug string) (targetpkg.Target, bool) {
-		if slug == "claudecode" {
+		if slug == "claude" {
 			return claudeTarget, true
 		}
 
@@ -491,7 +491,7 @@ func TestInstallCommandPrintsClaudeOAuthHintWhenAutoAuthIsUnsupported(t *testing
 	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
 	shouldAutoAuthenticate = func(*cobra.Command) bool { return true }
 
-	output, err := executeInstallCommand(t, "jira", "--target", "claudecode", "--no-prompt")
+	output, err := executeInstallCommand(t, "jira", "--target", "claude", "--no-prompt")
 	if err != nil {
 		t.Fatalf("expected jira install to succeed: %v", err)
 	}

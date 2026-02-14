@@ -19,8 +19,8 @@ func TestClaudeCodeTargetMetadata(t *testing.T) {
 		t.Fatalf("expected target name Claude Code, got %q", target.Name())
 	}
 
-	if target.Slug() != "claudecode" {
-		t.Fatalf("expected target slug claudecode, got %q", target.Slug())
+	if target.Slug() != "claude" {
+		t.Fatalf("expected target slug claude, got %q", target.Slug())
 	}
 }
 

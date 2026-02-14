@@ -33,11 +33,11 @@ Use Up/Down arrows, Enter to select. Type to filter.
 
 Step 2/4: Targets
 Detected targets:
-  Claude Code (claudecode) [installed]
+  Claude Code (claude) [installed]
   OpenCode (opencode) [installed]
   Codex (codex) [installed]
 Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter. Esc goes back.
-[ ] Claude Code (claudecode)
+[ ] Claude Code (claude)
 [x] OpenCode (opencode)
 [ ] Codex (codex)
 
@@ -65,7 +65,7 @@ mcp-wire list services
 
 ## Supported Targets
 
-- `claudecode` - Claude Code
+- `claude` - Claude Code
 - `codex` - Codex CLI
 - `opencode` - OpenCode
 
