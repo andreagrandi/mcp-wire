@@ -4,7 +4,7 @@
 
 mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) servers across multiple AI coding tools from one interface.
 
-## Interactive in practice (text walkthrough)
+## How It Works
 
 No manual config editing needed. In a terminal, `mcp-wire` opens a guided menu.
 
@@ -33,9 +33,11 @@ Use Up/Down arrows, Enter to select. Type to filter.
 
 Step 2/4: Targets
 Detected targets:
+  Claude Code (claudecode) [installed]
   OpenCode (opencode) [installed]
   Codex (codex) [installed]
-Use Up/Down arrows, Space to toggle, Enter to confirm. Type to filter.
+Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter. Esc goes back.
+[ ] Claude Code (claudecode)
 [x] OpenCode (opencode)
 [ ] Codex (codex)
 
@@ -61,6 +63,21 @@ mcp-wire status
 mcp-wire list services
 ```
 
+## Supported Targets
+
+- `claudecode` - Claude Code
+- `codex` - Codex CLI
+- `opencode` - OpenCode
+
+## Supported Services (bundled)
+
+- `context7` - Context7 documentation lookup MCP (OAuth)
+- `jira` - Atlassian Rovo MCP server (OAuth)
+- `sentry` - Sentry MCP server (OAuth)
+- `playwright` - Playwright browser automation MCP (`npx @playwright/mcp@latest`)
+
+Use `mcp-wire list services` and `mcp-wire list targets` to see what is available on your machine.
+
 ## Installation
 
 ### Homebrew (macOS/Linux)
@@ -70,19 +87,31 @@ brew tap andreagrandi/tap
 brew install mcp-wire
 ```
 
-### From source
+### Build from source
 
 ```bash
 git clone https://github.com/andreagrandi/mcp-wire
 cd mcp-wire
 make build
-./bin/mcp-wire --help
+./bin/mcp-wire
 ```
 
-## Run locally
+## Contributing
 
-```bash
-make test
-make build
-go run ./cmd/mcp-wire
+Contributions are welcome, especially new service definitions.
+
+- **Add a new service via YAML**: create a file in `services/` (no Go code required).
+- **Service schema**: `name`, `description`, `transport`, and either `url` (for `sse`) or `command`/`args` (for `stdio`).
+- **OAuth services**: add `auth: oauth` when applicable so install flows can drive authentication hints/automation.
+- **Run checks before PRs**: `make test`, `make test-integration`, `make build`.
+
+Example service file:
+
+```yaml
+name: example
+description: "Example MCP"
+transport: sse
+auth: oauth
+url: "https://mcp.example.com/mcp"
+env: []
 ```
