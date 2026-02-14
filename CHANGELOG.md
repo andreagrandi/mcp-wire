@@ -2,16 +2,15 @@
 
 ## [Unreleased]
 
+## v0.1.3 - 2026-02-14
+
 ### Changed
-- OAuth installs targeting Claude Code now print a post-install hint to continue authentication inside Claude Code with `/mcp` when automatic CLI auth is unavailable.
-- Renamed the Claude Code target slug from `claudecode` to `claude` to match the official CLI binary name.
-- Post-install output now highlights OAuth follow-up actions with a clear `Next step` line and adds spacing around the equivalent command to improve visibility before returning to the main menu.
-- Install and uninstall now support scope selection for scope-capable targets (currently Claude Code): `user` (default) or `project`.
-- Guided install/uninstall wizards now prompt for scope when selected targets support it.
-- `status` now supports `--scope` (`effective` default, `user`, `project`) so reported Claude Code state matches current project context instead of aggregating all projects.
-- Service validation and target config generation now support `http` transport in addition to `sse` and `stdio`.
-- Bundled `jira`, `sentry`, and `context7` services now use `transport: http` so Claude Code can consume `https://.../v1/mcp` endpoints correctly during install and reconfigure flows.
-- README contributor docs now clarify transport choices (`http`, `sse`, `stdio`) and include both remote and local service YAML examples.
+- Install, uninstall, and status flows are now scope-aware for Claude Code, with explicit `--scope` support (`effective`, `user`, `project`) and guided prompts where applicable.
+- Renamed the Claude Code target slug from `claudecode` to `claude` to align with the official CLI naming.
+- OAuth UX now provides clearer follow-up guidance, including a Claude-specific `/mcp` next-step hint when automatic CLI auth is unavailable.
+- Post-install output now highlights next steps and equivalent commands more clearly in guided flows.
+- Added first-class `http` transport support across service validation and target config generation (alongside `sse` and `stdio`).
+- Bundled OAuth services (`jira`, `sentry`, `context7`) now use `transport: http`, and contributor docs were updated with clearer transport guidance and examples.
 
 ## v0.1.2 - 2026-02-13
 
