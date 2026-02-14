@@ -598,6 +598,180 @@ For v0.1, service YAML files are shipped alongside the binary (in the repo). The
 
 ---
 
+## Phase 7: Official MCP Registry Integration (feature-gated, incremental)
+
+This phase adds optional integration with the Official MCP Registry (`https://registry.modelcontextprotocol.io`) without changing the current safe defaults.
+
+### 7.0 — Product guardrails (lock these first)
+
+- **Curated stays default**: mcp-wire bundled/user YAML services remain the default discovery/install source.
+- **Registry is opt-in**: registry support is disabled by default behind a one-time local setting until the feature is stable.
+- **No hidden references when disabled**: if registry is disabled, do not show registry flags/options/help/menu entries anywhere.
+- **Latest-only selection**: when a user selects a registry MCP, resolve details from the `latest` version only.
+- **Runtime checks are warnings by default**: missing package managers should warn, not block installation.
+
+### 7.1 — Feature gate and local settings
+
+Add mcp-wire local settings file (for example `~/.config/mcp-wire/config.json`) with:
+
+```json
+{
+  "features": {
+    "registry_enabled": false
+  }
+}
+```
+
+Suggested commands:
+
+- `mcp-wire feature enable registry`
+- `mcp-wire feature disable registry`
+- `mcp-wire feature list` (optional but useful)
+
+Acceptance criteria:
+
+- Fresh install behavior is unchanged.
+- With `registry_enabled=false`, all commands and guided flows behave exactly as today.
+
+### 7.2 — Official registry API client (read-only)
+
+Create `internal/registry/` for typed API client logic.
+
+Use these endpoints:
+
+- List latest servers: `GET /v0.1/servers?version=latest&limit=...&cursor=...`
+- Search latest servers: `GET /v0.1/servers?version=latest&search=...`
+- Get selected server details (latest only): `GET /v0.1/servers/{serverName}/versions/latest`
+
+Important details:
+
+- URL-encode `serverName` path values (`/` must become `%2F`).
+- Parse `application/problem+json` errors and return friendly messages.
+- Do not expose historical version selection in this phase.
+
+### 7.3 — Caching and indexing for responsive UX
+
+Add a local cache/index (for example under `~/.cache/mcp-wire/`) to avoid network-per-keystroke UI.
+
+Requirements:
+
+- Cold sync with pagination from `version=latest` list endpoint.
+- Incremental sync using `updated_since`.
+- Local in-memory filtering/search for interactive pickers.
+- Graceful fallback to stale cache when network fails.
+
+Acceptance criteria:
+
+- Guided and non-guided search feel immediate.
+- Registry API latency does not block every filter action.
+
+### 7.4 — Unified catalog model with explicit source labels
+
+Introduce an internal catalog type that supports both curated and registry entries.
+
+Each entry should carry source metadata:
+
+- `source: curated` (maintained/tested by mcp-wire)
+- `source: registry` (from Official MCP Registry, not vetted by mcp-wire)
+
+Keep existing `service.Service` and YAML format intact for curated entries.
+
+### 7.5 — Source selection in explicit CLI mode
+
+When registry is enabled, add source filtering:
+
+- `--source curated|registry|all` (default: `curated`)
+
+Apply this to:
+
+- `mcp-wire list services`
+- install flows that pick services interactively
+
+When registry is disabled:
+
+- Do not expose `--source`.
+- Do not mention registry in help/usage text.
+
+### 7.6 — Guided UI changes (only when enabled)
+
+Add a source step before service selection:
+
+1. Curated services (recommended)
+2. Registry services (community)
+3. Both
+
+If user selects "Both", show one merged searchable list with clear markers:
+
+- `*` = curated by mcp-wire
+- unmarked (or explicit label) = registry
+
+Always print the legend near the list when markers are shown.
+
+### 7.7 — Trust/safety messaging for registry entries
+
+Before confirming installation of a registry entry, show a short summary:
+
+- Source (`registry`)
+- Install type (`remote` or `package`)
+- Transport (`streamable-http`, `sse`, `stdio`)
+- Required secrets/credentials
+- Repository URL (if available)
+
+Interactive mode should require explicit confirmation for registry entries.
+
+### 7.8 — Install strategy (split delivery)
+
+#### 7.8.1 — Remote-first support
+
+First support registry entries that map cleanly to remote installs:
+
+- `remotes` with `streamable-http` or `sse`
+- URL/header variable prompting and substitution
+
+#### 7.8.2 — Package support
+
+Then support package-backed installs:
+
+- `npm`, `pypi`, `oci`, `nuget`, `mcpb`
+- map registry metadata into target-compatible stdio/local config
+
+For selected registry MCPs, always fetch/install using latest details only (`versions/latest`).
+
+### 7.9 — Runtime/package-manager preflight (warning-only default)
+
+For package-backed installs, preflight-check required runtime commands (for example `npx`, `uvx`, `docker`, `bun`, `dnx`, `pipx`, `python3`).
+
+Behavior:
+
+- Default: warn and continue.
+- Optional strict mode (for CI): fail fast when runtime is missing (for example `--strict-runtime-check`).
+
+### 7.10 — Status/uninstall parity for mixed sources
+
+Ensure `status` and `uninstall` handle registry-installed services as first-class entries, not only curated YAML service names.
+
+Requirements:
+
+- Status should not hide registry-installed entries.
+- Uninstall should work by installed service key regardless of source.
+
+### 7.11 — Incremental implementation slices
+
+Suggested order for shipping gradually:
+
+1. Feature gate + settings file + no-registry-references enforcement.
+2. Registry read client + latest-only detail lookup + basic tests.
+3. Cache/index + local search.
+4. `list services` source filter (`curated` default).
+5. Guided UI source step and merged list markers.
+6. Registry remote-install support.
+7. Runtime preflight warnings.
+8. Registry package-install support.
+9. Status/uninstall parity for mixed sources.
+10. Hardening, integration tests, docs.
+
+---
+
 ## Future Roadmap (post v0.1)
 
 These are features to consider after the core works. Not to be implemented now.
@@ -607,9 +781,9 @@ These are features to consider after the core works. Not to be implemented now.
 3. **OS keychain integration** — use `zalando/go-keyring` to store credentials in macOS Keychain / Linux Secret Service / Windows Credential Manager instead of a plaintext file.
 4. **`mcp-wire credentials list`** — show stored credentials (masked).
 5. **`mcp-wire credentials rotate <service>`** — re-open setup URL, re-prompt, update all targets.
-6. **Remote service registry** — `mcp-wire update` fetches latest service definitions from the GitHub repo without requiring a binary update.
+6. **Additional registry providers** — support third-party/private registries that implement the MCP Registry API, with per-registry trust controls.
 7. **Gemini CLI target** — add when config format is stable and documented.
-8. **OpenCode target** — add when config format is stable and documented.
+8. **Target capability parity** — expand and test Claude/Codex/OpenCode parity for advanced MCP config shapes (for example richer header mapping, variable substitution, and transport-specific options).
 9. **`mcp-wire diff`** — show what's configured in targets vs what a manifest says, dry-run mode.
 10. **Profiles** — "work" vs "personal" service sets, each with their own credentials and target selection.
 11. **Service health check** — `mcp-wire check <service>` verifies the MCP endpoint responds.
