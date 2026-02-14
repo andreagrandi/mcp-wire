@@ -1,6 +1,6 @@
 name: context7
 description: "Context7 documentation lookup MCP (OAuth)"
-transport: sse
+transport: http
 auth: oauth
 url: "https://mcp.context7.com/mcp/oauth"
 env: []

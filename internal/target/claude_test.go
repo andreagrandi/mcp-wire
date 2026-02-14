@@ -130,6 +130,33 @@ func TestClaudeCodeTargetInstallCreatesConfigAndAddsSSEService(t *testing.T) {
 	}
 }
 
+func TestClaudeCodeTargetInstallCreatesConfigAndAddsHTTPService(t *testing.T) {
+	target := newTestClaudeCodeTarget(t)
+
+	svc := service.Service{
+		Name:      "demo-http-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+	}
+
+	err := target.Install(svc, nil)
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readTargetConfigFile(t, target.configPath)
+	mcpServers := mustMapValue(t, config["mcpServers"], "mcpServers")
+	serviceConfig := mustMapValue(t, mcpServers["demo-http-service"], "mcpServers.demo-http-service")
+
+	if serviceConfig["type"] != "http" {
+		t.Fatalf("expected service type http, got %#v", serviceConfig["type"])
+	}
+
+	if serviceConfig["url"] != "https://example.com/mcp" {
+		t.Fatalf("expected service url to be set, got %#v", serviceConfig["url"])
+	}
+}
+
 func TestClaudeCodeTargetInstallPreservesUnknownTopLevelKeys(t *testing.T) {
 	target := newTestClaudeCodeTarget(t)
 
@@ -213,7 +240,7 @@ func TestClaudeCodeTargetInstallWritesStdioServiceConfiguration(t *testing.T) {
 func TestClaudeCodeTargetInstallReturnsErrorForInvalidTransport(t *testing.T) {
 	target := newTestClaudeCodeTarget(t)
 
-	err := target.Install(service.Service{Name: "demo-service", Transport: "http"}, nil)
+	err := target.Install(service.Service{Name: "demo-service", Transport: "grpc"}, nil)
 	if err == nil {
 		t.Fatal("expected install to fail for unsupported transport")
 	}

@@ -557,6 +557,13 @@ func buildClaudeCodeServerConfig(svc service.Service, resolvedEnv map[string]str
 	}
 
 	switch transport {
+	case "http":
+		url := strings.TrimSpace(svc.URL)
+		if url == "" {
+			return nil, errors.New("http service requires url")
+		}
+
+		serverConfig["url"] = url
 	case "sse":
 		url := strings.TrimSpace(svc.URL)
 		if url == "" {

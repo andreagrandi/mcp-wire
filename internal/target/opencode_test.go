@@ -88,7 +88,7 @@ func TestOpenCodeTargetInstallCreatesConfigAndAddsRemoteService(t *testing.T) {
 
 	svc := service.Service{
 		Name:      "demo-service",
-		Transport: "sse",
+		Transport: "http",
 		URL:       "https://example.com/mcp",
 	}
 
@@ -209,7 +209,7 @@ func TestOpenCodeTargetInstallPreservesUnknownTopLevelKeys(t *testing.T) {
 func TestOpenCodeTargetInstallReturnsErrorForInvalidTransport(t *testing.T) {
 	target := newTestOpenCodeTarget(t)
 
-	err := target.Install(service.Service{Name: "demo-service", Transport: "http"}, nil)
+	err := target.Install(service.Service{Name: "demo-service", Transport: "grpc"}, nil)
 	if err == nil {
 		t.Fatal("expected install to fail for unsupported transport")
 	}

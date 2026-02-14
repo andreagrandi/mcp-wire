@@ -1,6 +1,6 @@
 name: jira
 description: "Atlassian Rovo MCP server (OAuth)"
-transport: sse
+transport: http
 auth: oauth
 url: "https://mcp.atlassian.com/v1/mcp"
 env: []

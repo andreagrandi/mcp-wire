@@ -95,7 +95,7 @@ func TestCodexTargetInstallCreatesHTTPServiceUsingBearerTokenEnvVar(t *testing.T
 
 	svc := service.Service{
 		Name:      "docs-service",
-		Transport: "sse",
+		Transport: "http",
 		URL:       "https://example.com/mcp",
 		Env: []service.EnvVar{
 			{Name: "DOCS_TOKEN", Required: true},
@@ -163,7 +163,7 @@ func TestCodexTargetInstallPreservesUnknownTopLevelKeys(t *testing.T) {
 func TestCodexTargetInstallReturnsErrorForInvalidTransport(t *testing.T) {
 	target := newTestCodexTarget(t)
 
-	err := target.Install(service.Service{Name: "demo-service", Transport: "http"}, nil)
+	err := target.Install(service.Service{Name: "demo-service", Transport: "grpc"}, nil)
 	if err == nil {
 		t.Fatal("expected install to fail for unsupported transport")
 	}

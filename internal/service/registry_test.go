@@ -21,12 +21,24 @@ func TestValidateServiceRejectsMissingName(t *testing.T) {
 func TestValidateServiceRejectsUnsupportedTransport(t *testing.T) {
 	service := Service{
 		Name:      "demo-service",
-		Transport: "http",
+		Transport: "grpc",
 	}
 
 	err := ValidateService(service)
 	if err == nil {
 		t.Fatal("expected validation error for unsupported transport")
+	}
+}
+
+func TestValidateServiceRequiresURLForHTTP(t *testing.T) {
+	service := Service{
+		Name:      "demo-service",
+		Transport: "http",
+	}
+
+	err := ValidateService(service)
+	if err == nil {
+		t.Fatal("expected validation error for missing http url")
 	}
 }
 

@@ -351,6 +351,19 @@ func buildOpenCodeServerConfig(svc service.Service, resolvedEnv map[string]strin
 	}
 
 	switch transport {
+	case "http":
+		url := strings.TrimSpace(svc.URL)
+		if url == "" {
+			return nil, errors.New("http service requires url")
+		}
+
+		serverConfig["type"] = "remote"
+		serverConfig["url"] = url
+
+		headers := normalizeResolvedEnv(resolvedEnv)
+		if len(headers) > 0 {
+			serverConfig["headers"] = headers
+		}
 	case "sse":
 		url := strings.TrimSpace(svc.URL)
 		if url == "" {

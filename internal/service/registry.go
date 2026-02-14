@@ -82,6 +82,10 @@ func ValidateService(s Service) error {
 	}
 
 	switch transport {
+	case "http":
+		if strings.TrimSpace(s.URL) == "" {
+			return fmt.Errorf("service %q with http transport requires url", name)
+		}
 	case "sse":
 		if strings.TrimSpace(s.URL) == "" {
 			return fmt.Errorf("service %q with sse transport requires url", name)

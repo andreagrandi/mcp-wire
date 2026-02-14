@@ -9,6 +9,8 @@
 - Install and uninstall now support scope selection for scope-capable targets (currently Claude Code): `user` (default) or `project`.
 - Guided install/uninstall wizards now prompt for scope when selected targets support it.
 - `status` now supports `--scope` (`effective` default, `user`, `project`) so reported Claude Code state matches current project context instead of aggregating all projects.
+- Service validation and target config generation now support `http` transport in addition to `sse` and `stdio`.
+- Bundled `jira`, `sentry`, and `context7` services now use `transport: http` so Claude Code can consume `https://.../v1/mcp` endpoints correctly during install and reconfigure flows.
 
 ## v0.1.2 - 2026-02-13
 

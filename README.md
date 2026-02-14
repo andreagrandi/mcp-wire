@@ -116,7 +116,7 @@ make build
 Contributions are welcome, especially new service definitions.
 
 - **Add a new service via YAML**: create a file in `services/` (no Go code required).
-- **Service schema**: `name`, `description`, `transport`, and either `url` (for `sse`) or `command`/`args` (for `stdio`).
+- **Service schema**: `name`, `description`, `transport`, and either `url` (for `sse`/`http`) or `command`/`args` (for `stdio`).
 - **OAuth services**: add `auth: oauth` when applicable so install flows can drive authentication hints/automation.
 - **Run checks before PRs**: `make test`, `make test-integration`, `make build`.
 
@@ -125,7 +125,7 @@ Example service file:
 ```yaml
 name: example
 description: "Example MCP"
-transport: sse
+transport: http
 auth: oauth
 url: "https://mcp.example.com/mcp"
 env: []

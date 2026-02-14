@@ -255,6 +255,18 @@ func buildCodexServerConfig(svc service.Service, resolvedEnv map[string]string) 
 	serverConfig := map[string]any{}
 
 	switch transport {
+	case "http":
+		url := strings.TrimSpace(svc.URL)
+		if url == "" {
+			return nil, errors.New("http service requires url")
+		}
+
+		serverConfig["url"] = url
+
+		bearerEnvVar := pickBearerEnvVar(svc, resolvedEnv)
+		if bearerEnvVar != "" {
+			serverConfig["bearer_token_env_var"] = bearerEnvVar
+		}
 	case "sse":
 		url := strings.TrimSpace(svc.URL)
 		if url == "" {
