@@ -5,6 +5,7 @@
 ### Changed
 - OAuth installs targeting Claude Code now print a post-install hint to continue authentication inside Claude Code with `/mcp` when automatic CLI auth is unavailable.
 - Renamed the Claude Code target slug from `claudecode` to `claude` to match the official CLI binary name.
+- Post-install output now highlights OAuth follow-up actions with a clear `Next step` line and adds spacing around the equivalent command to improve visibility before returning to the main menu.
 
 ## v0.1.2 - 2026-02-13
 

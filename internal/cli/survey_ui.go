@@ -34,7 +34,13 @@ func canUseInteractiveUI(input io.Reader, output io.Writer) bool {
 }
 
 func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
+	showMenuSpacing := false
+
 	for {
+		if showMenuSpacing {
+			fmt.Fprintln(cmd.OutOrStdout())
+		}
+
 		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc keeps you in the main menu.")
 
 		choice := ""
@@ -58,16 +64,19 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 			if err := runInstallWizardSurvey(cmd, nil, false); err != nil {
 				return err
 			}
+			showMenuSpacing = true
 		case "Uninstall service":
 			if err := runUninstallWizardSurvey(cmd, nil); err != nil {
 				return err
 			}
+			showMenuSpacing = true
 		case "Status":
 			fmt.Fprintln(cmd.OutOrStdout())
 			if err := runStatusFlow(cmd.OutOrStdout()); err != nil {
 				return err
 			}
 			fmt.Fprintln(cmd.OutOrStdout())
+			showMenuSpacing = true
 		case "List services":
 			services, err := loadServices()
 			if err != nil {
@@ -77,10 +86,12 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 			fmt.Fprintln(cmd.OutOrStdout())
 			printServicesList(cmd.OutOrStdout(), services)
 			fmt.Fprintln(cmd.OutOrStdout())
+			showMenuSpacing = true
 		case "List targets":
 			fmt.Fprintln(cmd.OutOrStdout())
 			printTargetsList(cmd.OutOrStdout(), allTargets())
 			fmt.Fprintln(cmd.OutOrStdout())
+			showMenuSpacing = true
 		case "Exit":
 			fmt.Fprintln(cmd.OutOrStdout(), "Goodbye.")
 			return nil
@@ -171,7 +182,7 @@ serviceStep:
 					return err
 				}
 
-				fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentInstallCommand(svc.Name, targetDefinitions))
+				printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions))
 				return nil
 			}
 		}
@@ -274,7 +285,7 @@ serviceStep:
 					return err
 				}
 
-				fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
+				printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
 				return nil
 			}
 		}

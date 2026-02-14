@@ -389,7 +389,7 @@ func TestInstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 		t.Fatalf("expected selected target to be installed once, got %d", alpha.installCalls)
 	}
 
-	if !strings.Contains(output, "Equivalent command: mcp-wire install demo-service --target alpha") {
+	if !strings.Contains(output, "Equivalent command:") || !strings.Contains(output, "mcp-wire install demo-service --target alpha") {
 		t.Fatalf("expected equivalent command output, got %q", output)
 	}
 }
@@ -496,7 +496,7 @@ func TestInstallCommandPrintsClaudeOAuthHintWhenAutoAuthIsUnsupported(t *testing
 		t.Fatalf("expected jira install to succeed: %v", err)
 	}
 
-	if !strings.Contains(output, "Claude Code: complete OAuth in Claude Code with /mcp") {
+	if !strings.Contains(output, "[!] Next step: In Claude Code, run /mcp to complete OAuth authentication.") {
 		t.Fatalf("expected Claude OAuth guidance in output, got %q", output)
 	}
 

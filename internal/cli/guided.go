@@ -61,7 +61,7 @@ func runInstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlugs
 		return err
 	}
 
-	fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentInstallCommand(svc.Name, targetDefinitions))
+	printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions))
 	return nil
 }
 
@@ -131,7 +131,7 @@ func runUninstallWizardPlain(cmd *cobra.Command, reader *bufio.Reader, targetSlu
 		return err
 	}
 
-	fmt.Fprintf(output, "Equivalent command: %s\n", buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
+	printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions))
 	return nil
 }
 
@@ -145,6 +145,13 @@ func resolveTargetsForWizard(output ioWriter, reader *bufio.Reader, targetSlugs 
 
 type ioWriter interface {
 	Write(p []byte) (n int, err error)
+}
+
+func printEquivalentCommand(output ioWriter, command string) {
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "Equivalent command:")
+	fmt.Fprintf(output, "  %s\n", command)
+	fmt.Fprintln(output)
 }
 
 func pickServiceInteractive(output ioWriter, reader *bufio.Reader, services map[string]service.Service) (service.Service, error) {

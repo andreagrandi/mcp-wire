@@ -196,7 +196,7 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 		if !supportsAuth {
 			manualAuthHint := oauthManualAuthHint(targetDefinition)
 			if manualAuthHint != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  %s: %s\n", targetDefinition.Name(), manualAuthHint)
+				fmt.Fprintf(cmd.OutOrStdout(), "  [!] Next step: %s\n", manualAuthHint)
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "  %s: authentication skipped (automatic OAuth is not supported by this target)\n", targetDefinition.Name())
 			}
@@ -249,7 +249,7 @@ func oauthManualAuthHint(targetDefinition target.Target) string {
 
 	switch targetSlug {
 	case "claude":
-		return "complete OAuth in Claude Code with /mcp"
+		return "In Claude Code, run /mcp to complete OAuth authentication."
 	default:
 		return ""
 	}

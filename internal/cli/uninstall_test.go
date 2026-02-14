@@ -196,7 +196,7 @@ func TestUninstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 		t.Fatalf("expected selected target to uninstall once, got %d", alpha.uninstallCalls)
 	}
 
-	if !strings.Contains(output, "Equivalent command: mcp-wire uninstall demo-service --target alpha") {
+	if !strings.Contains(output, "Equivalent command:") || !strings.Contains(output, "mcp-wire uninstall demo-service --target alpha") {
 		t.Fatalf("expected equivalent command output, got %q", output)
 	}
 }
