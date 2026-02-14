@@ -117,6 +117,7 @@ Contributions are welcome, especially new service definitions.
 
 - **Add a new service via YAML**: create a file in `services/` (no Go code required).
 - **Service schema**: `name`, `description`, `transport`, and either `url` (for `sse`/`http`) or `command`/`args` (for `stdio`).
+- **Transport values**: `http` (streamable HTTP endpoint), `sse` (Server-Sent Events endpoint), `stdio` (local command-based MCP server).
 - **OAuth services**: add `auth: oauth` when applicable so install flows can drive authentication hints/automation.
 - **Run checks before PRs**: `make test`, `make test-integration`, `make build`.
 
@@ -128,5 +129,16 @@ description: "Example MCP"
 transport: http
 auth: oauth
 url: "https://mcp.example.com/mcp"
+env: []
+```
+
+Example `stdio` service:
+
+```yaml
+name: example-stdio
+description: "Example local MCP"
+transport: stdio
+command: npx
+args: ["-y", "@example/mcp-server"]
 env: []
 ```
