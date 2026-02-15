@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Added
+- Registry entries with package-based install methods (`npm`, `pypi`, `docker`/`oci`, `nuget`, `mcpb`) can now be installed end-to-end as stdio services, mapping registry package metadata into command + args configs.
+- Selecting a registry entry now fetches the latest version details from the `versions/latest` API endpoint, ensuring installs always use the most recent package version and metadata.
+- Explicit install path (`mcp-wire install <name>`) now falls back to the registry catalog when no curated service matches, enabling direct reinstall of registry entries from guided-mode equivalent commands.
+- Package runtime arguments with input-style variables (named args without literal values) now create env var placeholders that are prompted and substituted at install time.
+- Registry package entries with multiple packages now fall back to the first supported registry type instead of failing when the first package is unsupported.
+- Trust/safety summary for registry entries now shows package type, versioned identifier, and runtime hint when the entry uses package-based install.
 - Install and uninstall wizards now include a source selection step (Curated, Registry, Both) when the registry feature is enabled, in both plain and survey UIs.
 - `list services --source all` now marks curated entries with a `*` prefix and prints a legend line; single-source views show no markers.
 - `--source` flag on `list services` is now visible in help output when the registry feature is enabled, and hidden otherwise.
@@ -18,8 +24,9 @@
 ### Changed
 - Selecting a registry service in the install/uninstall wizard shows a rejection message and returns to source selection instead of looping indefinitely.
 - Catalog display in wizards and `list services` uses `*` curated markers instead of `[registry]` suffix tags when showing mixed sources.
-- Registry rejection message now reads "This registry service has no supported remote transport. Package-based install is not yet supported." instead of the generic "Registry services cannot be installed yet."
+- Registry rejection message for entries with no supported install method now reads "no supported install method" instead of the package-specific message, since both remote and package paths are now attempted.
 - Duplicate env vars from URL variables and header variables are now merged with OR on `Required`, matching the existing `envVarsFromRegistry` dedup pattern.
+- `applyRegistrySubstitutions` now substitutes `{varName}` placeholders in service args (for package-based installs) in addition to URL and headers.
 
 ## v0.1.3 - 2026-02-14
 

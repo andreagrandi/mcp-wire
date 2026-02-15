@@ -429,14 +429,19 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 			}
 		}
 
+		if selected.Source == catalog.SourceRegistry {
+			fmt.Fprintln(output, "Fetching latest details...")
+			selected = refreshRegistryEntry(selected)
+		}
+
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {
-				fmt.Fprintln(output, "This registry service has no supported remote transport. Package-based install is not yet supported.")
+				fmt.Fprintln(output, "This registry service has no supported install method (unsupported transport or package type).")
 				return service.Service{}, errRegistryOnly
 			}
 
-			fmt.Fprintln(output, "This registry service has no supported remote transport. Package-based install is not yet supported. Choose a curated service.")
+			fmt.Fprintln(output, "This registry service has no supported install method. Choose a curated service.")
 			continue
 		}
 

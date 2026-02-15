@@ -721,14 +721,14 @@ Interactive mode should require explicit confirmation for registry entries.
 
 ### 7.8 — Install strategy (split delivery)
 
-#### 7.8.1 — Remote-first support
+#### 7.8.1 — Remote-first support ✅
 
 First support registry entries that map cleanly to remote installs:
 
 - `remotes` with `streamable-http` or `sse`
 - URL/header variable prompting and substitution
 
-#### 7.8.2 — Package support
+#### 7.8.2 — Package support ✅
 
 Then support package-backed installs:
 
@@ -766,7 +766,7 @@ Suggested order for shipping gradually:
 5. ✅ Guided UI source step and merged list markers.
 6. ✅ Registry remote-install support.
 7. Runtime preflight warnings.
-8. Registry package-install support.
+8. ✅ Registry package-install support.
 9. Status/uninstall parity for mixed sources.
 10. Hardening, integration tests, docs.
 

@@ -55,12 +55,7 @@ func newInstallCmd() *cobra.Command {
 				return errors.New("service name is required")
 			}
 
-			services, err := loadServices()
-			if err != nil {
-				return fmt.Errorf("load services: %w", err)
-			}
-
-			svc, err := findServiceDefinitionByName(services, requestedServiceName)
+			svc, err := resolveServiceByName(requestedServiceName)
 			if err != nil {
 				return err
 			}
@@ -79,6 +74,42 @@ func newInstallCmd() *cobra.Command {
 	cmd.Flags().StringVar(&scopeValue, "scope", string(target.ConfigScopeUser), "Config scope for supported targets: user or project")
 
 	return cmd
+}
+
+func resolveServiceByName(name string) (service.Service, error) {
+	services, err := loadServices()
+	if err != nil {
+		return service.Service{}, fmt.Errorf("load services: %w", err)
+	}
+
+	svc, err := findServiceDefinitionByName(services, name)
+	if err == nil {
+		return svc, nil
+	}
+
+	cfg, cfgErr := loadConfig()
+	if cfgErr != nil || !cfg.IsFeatureEnabled("registry") {
+		return service.Service{}, err
+	}
+
+	cat, catErr := loadCatalog("registry", true)
+	if catErr != nil {
+		return service.Service{}, err
+	}
+
+	entry, found := cat.Find(name)
+	if !found {
+		return service.Service{}, err
+	}
+
+	entry = refreshRegistryEntry(entry)
+
+	resolved, ok := catalogEntryToService(entry)
+	if !ok {
+		return service.Service{}, fmt.Errorf("registry service %q has no supported install method", name)
+	}
+
+	return resolved, nil
 }
 
 func findServiceDefinitionByName(services map[string]service.Service, name string) (service.Service, error) {
@@ -182,9 +213,7 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 		return err
 	}
 
-	if svc.Headers != nil {
-		applyRegistrySubstitutions(&svc, resolvedEnv)
-	}
+	applyRegistrySubstitutions(&svc, resolvedEnv)
 
 	printInstallPlan(cmd.OutOrStdout(), targetDefinitions)
 	autoAuthenticate := shouldAutoAuthenticate(cmd) && serviceUsesOAuth(svc)
@@ -280,6 +309,10 @@ func applyRegistrySubstitutions(svc *service.Service, resolvedEnv map[string]str
 
 	for name, tmpl := range svc.Headers {
 		svc.Headers[name] = substituteVars(tmpl, resolvedEnv)
+	}
+
+	for i, arg := range svc.Args {
+		svc.Args[i] = substituteVars(arg, resolvedEnv)
 	}
 }
 

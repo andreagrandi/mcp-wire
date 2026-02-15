@@ -149,7 +149,7 @@ func TestPickServiceInteractiveCatalogRegistryOnlyReturnsError(t *testing.T) {
 		t.Fatalf("expected trust summary in output, got %q", output.String())
 	}
 
-	if !strings.Contains(output.String(), "This registry service has no supported remote transport") {
+	if !strings.Contains(output.String(), "This registry service has no supported install method") {
 		t.Fatalf("expected rejection message, got %q", output.String())
 	}
 }

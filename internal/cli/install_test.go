@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/andreagrandi/mcp-wire/internal/config"
 	"github.com/andreagrandi/mcp-wire/internal/credential"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
@@ -303,6 +306,112 @@ func TestInstallCommandReturnsErrorWhenServiceIsMissing(t *testing.T) {
 
 	if !strings.Contains(err.Error(), "missing-service") {
 		t.Fatalf("expected missing service name in error, got %v", err)
+	}
+}
+
+func TestInstallCommandFallsBackToRegistryForUnknownCuratedService(t *testing.T) {
+	restore := overrideInstallCommandDependencies(t)
+	defer restore()
+
+	installTarget := &fakeInstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{}, nil
+	}
+	listInstalledTargets = func() []targetpkg.Target { return []targetpkg.Target{installTarget} }
+
+	loadConfig = func() (*config.Config, error) {
+		return config.LoadFrom("/dev/null")
+	}
+	// Enable registry feature by overriding IsFeatureEnabled indirectly:
+	// config.LoadFrom("/dev/null") returns an empty config where "registry"
+	// defaults to false. Instead, use a real config with the feature set.
+	tmpDir := t.TempDir()
+	cfgPath := tmpDir + "/config.json"
+	if err := writeTempFile(cfgPath, `{"features":{"registry":true}}`); err != nil {
+		t.Fatalf("failed to write temp config: %v", err)
+	}
+	loadConfig = func() (*config.Config, error) {
+		return config.LoadFrom(cfgPath)
+	}
+
+	loadRegistryCache = func() []registry.ServerResponse {
+		return []registry.ServerResponse{
+			{
+				Server: registry.ServerJSON{
+					Name:        "my-npm-server",
+					Description: "An npm MCP server",
+					Packages: []registry.Package{
+						{
+							RegistryType: "npm",
+							Identifier:   "@example/mcp-server",
+							Version:      "1.0.0",
+							RuntimeArguments: []registry.Argument{
+								{Value: "--stdio"},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+
+	fetchServerLatest = func(name string) (*registry.ServerResponse, error) {
+		if name != "my-npm-server" {
+			return nil, errors.New("not found")
+		}
+		return &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "my-npm-server",
+				Description: "An npm MCP server (latest)",
+				Packages: []registry.Package{
+					{
+						RegistryType: "npm",
+						Identifier:   "@example/mcp-server",
+						Version:      "2.0.0",
+						RuntimeArguments: []registry.Argument{
+							{Value: "--stdio"},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	newCredentialEnvSource = func() credential.Source { return &testCredentialSource{values: map[string]string{}} }
+	newCredentialFileSource = func(string) credential.Source { return &testCredentialSource{values: map[string]string{}} }
+
+	output, err := executeInstallCommand(t, "my-npm-server", "--no-prompt")
+	if err != nil {
+		t.Fatalf("expected registry fallback install to succeed: %v", err)
+	}
+
+	if installTarget.installCalls != 1 {
+		t.Fatalf("expected target to be installed once, got %d", installTarget.installCalls)
+	}
+
+	// Verify the service was resolved from the refreshed registry entry (version 2.0.0).
+	installedSvc := installTarget.lastService
+	if installedSvc.Transport != "stdio" {
+		t.Fatalf("expected stdio transport, got %q", installedSvc.Transport)
+	}
+	if installedSvc.Command != "npx" {
+		t.Fatalf("expected npx command, got %q", installedSvc.Command)
+	}
+	// Version 2.0.0 from fetchServerLatest, not 1.0.0 from cache.
+	foundVersion := false
+	for _, arg := range installedSvc.Args {
+		if strings.Contains(arg, "@2.0.0") {
+			foundVersion = true
+			break
+		}
+	}
+	if !foundVersion {
+		t.Fatalf("expected @2.0.0 from refreshed registry, got args %v", installedSvc.Args)
+	}
+
+	if !strings.Contains(output, "Alpha CLI: configured") {
+		t.Fatalf("expected configured output, got %q", output)
 	}
 }
 
@@ -884,6 +993,9 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 	originalNewCredentialResolver := newCredentialResolver
 	originalAllTargets := allTargets
 	originalShouldAutoAuthenticate := shouldAutoAuthenticate
+	originalLoadConfig := loadConfig
+	originalLoadRegistryCache := loadRegistryCache
+	originalFetchServerLatest := fetchServerLatest
 
 	return func() {
 		loadServices = originalLoadServices
@@ -894,6 +1006,9 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 		newCredentialResolver = originalNewCredentialResolver
 		allTargets = originalAllTargets
 		shouldAutoAuthenticate = originalShouldAutoAuthenticate
+		loadConfig = originalLoadConfig
+		loadRegistryCache = originalLoadRegistryCache
+		fetchServerLatest = originalFetchServerLatest
 	}
 }
 
@@ -925,4 +1040,8 @@ func executeInstallCommandWithInput(t *testing.T, input string, args ...string) 
 	output := stdout.String() + stderr.String()
 
 	return output, err
+}
+
+func writeTempFile(path, content string) error {
+	return os.WriteFile(path, []byte(content), 0o644)
 }
