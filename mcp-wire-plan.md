@@ -60,9 +60,9 @@ mcp-wire/
 
 ---
 
-## Phase 1: Core Data Model
+## Phase 1: Core Data Model ✅
 
-### 1.1 — Service Definition (YAML schema)
+### 1.1 — Service Definition (YAML schema) ✅
 
 Create `internal/service/service.go` with the struct that maps to service YAML files.
 
@@ -118,7 +118,7 @@ args: ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"]
 env: []
 ```
 
-### 1.2 — Service Registry
+### 1.2 — Service Registry ✅
 
 Create `internal/service/registry.go`.
 
@@ -137,7 +137,7 @@ func LoadServices(paths ...string) (map[string]Service, error)
 func ValidateService(s Service) error
 ```
 
-### 1.3 — Target Interface
+### 1.3 — Target Interface ✅
 
 Create `internal/target/target.go`.
 
@@ -164,7 +164,7 @@ type Target interface {
 }
 ```
 
-### 1.4 — Target Registry
+### 1.4 — Target Registry ✅
 
 Create `internal/target/registry.go`.
 
@@ -178,13 +178,13 @@ func FindTarget(slug string) (Target, bool)
 
 ---
 
-## Phase 2: Target Implementations
+## Phase 2: Target Implementations ✅
 
 Each target follows the same pattern: locate the config file, read it as JSON (preserving unknown keys), add/remove the MCP entry, write it back.
 
 **Critical rule**: always preserve unknown keys. Use `map[string]any` or `json.RawMessage` when reading config files. Never deserialize into a strict struct that would drop fields the user set manually.
 
-### 2.1 — Claude Code Target
+### 2.1 — Claude Code Target ✅
 
 Create `internal/target/claude.go`.
 
@@ -227,7 +227,7 @@ Implementation:
 - `Uninstall()`: same flow, delete the key from `mcpServers`.
 - `List()`: read `mcpServers` keys.
 
-### 2.2 — Codex Target
+### 2.2 — Codex Target ✅
 
 Create `internal/target/codex.go`.
 
@@ -248,9 +248,9 @@ Research their config formats when adding support. Each should take roughly 50-1
 
 ---
 
-## Phase 3: Credential Resolution
+## Phase 3: Credential Resolution ✅
 
-### 3.1 — Credential Source Interface
+### 3.1 — Credential Source Interface ✅
 
 Create `internal/credential/resolver.go`.
 
@@ -275,13 +275,13 @@ Resolution order:
 2. File store (`~/.config/mcp-wire/credentials`)
 3. Not found → trigger interactive prompt
 
-### 3.2 — Environment Source
+### 3.2 — Environment Source ✅
 
 Create `internal/credential/env.go`.
 
 Simple wrapper around `os.Getenv`. `Store()` returns `ErrNotSupported`.
 
-### 3.3 — File Source
+### 3.3 — File Source ✅
 
 Create `internal/credential/file.go`.
 
@@ -297,7 +297,7 @@ JIRA_API_TOKEN=jira_xyz789...
 On `Get()`: read the file, parse lines, return matching value.
 On `Store()`: read the file, update or append the key, write back.
 
-### 3.4 — Interactive Credential Flow
+### 3.4 — Interactive Credential Flow ✅
 
 This lives in the install command logic (not in the credential package). When a required env var is not found by the resolver:
 
@@ -332,13 +332,13 @@ Example output:
 
 ---
 
-## Phase 4: CLI Commands
+## Phase 4: CLI Commands ✅
 
 Use `github.com/spf13/cobra` for command structure.
 
-### 4A — Guided Interactive UX (high priority)
+### 4A — Guided Interactive UX (high priority) ✅
 
-#### 4A.1 — Main interactive entry (`mcp-wire`)
+#### 4A.1 — Main interactive entry (`mcp-wire`) ✅
 
 When the user runs `mcp-wire` with no subcommand, open an interactive menu:
 
@@ -349,7 +349,7 @@ When the user runs `mcp-wire` with no subcommand, open an interactive menu:
 5. List targets
 6. Exit
 
-#### 4A.2 — Install wizard flow
+#### 4A.2 — Install wizard flow ✅
 
 1. **Service selection**
    - Show a searchable/filterable list (name + description).
@@ -369,20 +369,20 @@ When the user runs `mcp-wire` with no subcommand, open an interactive menu:
    - Print per-target success/failure.
    - Print equivalent explicit command.
 
-#### 4A.3 — Uninstall wizard flow
+#### 4A.3 — Uninstall wizard flow ✅
 
 1. Service selection (searchable)
 2. Target selection (multi-select)
 3. Confirmation
 4. Optional credential cleanup prompt
 
-#### 4A.4 — Fallback behavior for explicit commands
+#### 4A.4 — Fallback behavior for explicit commands ✅
 
 - `mcp-wire install` with no service argument should enter the service picker.
 - `mcp-wire uninstall` with no service argument should enter the service picker.
 - Explicit args/flags continue to work unchanged.
 
-### 4.1 — `mcp-wire list services`
+### 4.1 — `mcp-wire list services` ✅
 
 List all available service definitions found in the services directory.
 
@@ -397,7 +397,7 @@ Available services:
   filesystem   Local filesystem access MCP
 ```
 
-### 4.2 — `mcp-wire list targets`
+### 4.2 — `mcp-wire list targets` ✅
 
 List all known targets and whether they are detected on this system.
 
@@ -412,7 +412,7 @@ Targets:
   opencode     OpenCode      ✗ not found
 ```
 
-### 4.3 — `mcp-wire install <service>`
+### 4.3 — `mcp-wire install <service>` ✅
 
 Flags:
 
@@ -429,7 +429,7 @@ Flow:
 6. For each target (filtered by `--target` or all installed), call `target.Install()`.
 7. Print results.
 
-### 4.4 — `mcp-wire uninstall <service>`
+### 4.4 — `mcp-wire uninstall <service>` ✅
 
 Flags:
 
@@ -441,7 +441,7 @@ Flow:
 2. If `<service>` is omitted, enter interactive service selection.
 3. Optionally ask if the user wants to remove stored credentials for this service.
 
-### 4.5 — `mcp-wire status`
+### 4.5 — `mcp-wire status` ✅
 
 Show a matrix of services × targets.
 
@@ -458,7 +458,7 @@ Implementation: for each installed target, call `target.List()` and cross-refere
 
 ---
 
-## Phase 5: Initial Service Definitions
+## Phase 5: Initial Service Definitions ✅
 
 Create YAML files in the `services/` directory for at least these services:
 
@@ -508,9 +508,9 @@ Before writing more service definitions, verify the current MCP configuration fo
 
 ---
 
-## Phase 6: Build, Test, Release
+## Phase 6: Build, Test, Release ✅
 
-### 6.1 — Go Module Setup
+### 6.1 — Go Module Setup ✅
 
 ```
 go mod init github.com/<your-username>/mcp-wire
@@ -520,7 +520,7 @@ go get gopkg.in/yaml.v3
 
 No other external dependencies should be needed for v0.1.
 
-### 6.2 — Testing Strategy
+### 6.2 — Testing Strategy ✅
 
 - **Service loading**: test YAML parsing with valid and invalid files, test validation logic, test precedence when multiple paths are provided.
 - **Target implementations**: test Install/Uninstall/List against temporary config files. Create a temp dir, write a sample config, run the operation, assert the result.
@@ -530,7 +530,7 @@ No other external dependencies should be needed for v0.1.
 - **Sandboxed CLI integration tests**: run end-to-end install/status/uninstall flows in temporary HOME/PATH to avoid touching user config.
 - **Manual QA checklist**: test on a machine with existing MCP configs and a clean machine; verify no unrelated config keys are removed.
 
-### 6.3 — Build
+### 6.3 — Build ✅
 
 Standard Go cross-compilation:
 
@@ -544,7 +544,7 @@ GOOS=linux GOARCH=amd64 go build -o mcp-wire-linux-amd64 .
 GOOS=windows GOARCH=amd64 go build -o mcp-wire-windows-amd64.exe .
 ```
 
-### 6.4 — Release
+### 6.4 — Release ✅
 
 Use GoReleaser or GitHub Actions for automated releases. Provide binaries for macOS (arm64 + amd64), Linux (amd64), and Windows (amd64). Consider a Homebrew tap for macOS users.
 
@@ -554,23 +554,23 @@ Use GoReleaser or GitHub Actions for automated releases. Provide binaries for ma
 
 Implement in this exact order to have something working as early as possible:
 
-1. **Go module + main.go + Cobra skeleton** — just `mcp-wire --help` works.
-2. **Service struct + YAML loader + validation** — can parse service files.
-3. **`list services` command** — first working command, proves the YAML loading.
-4. **Target interface + Claude Code implementation** — can read/write Claude Code config.
-5. **`list targets` command** — detects installed tools.
-6. **Credential resolver (env + file sources)** — can resolve and store tokens.
-7. **`install` command with interactive prompt** — the core feature, end-to-end flow.
-8. **`uninstall` command** — straightforward once install works.
-9. **`status` command** — reads from all targets, displays matrix.
-10. **Codex target implementation** — second target, validates the abstraction.
-11. **Initial service YAML files** — ship with 3-5 verified services.
-12. **README, contributing guide** — explain how to add services and targets.
-13. **Guided main menu** — `mcp-wire` with no args opens interactive navigation.
-14. **Install wizard UX** — searchable service picker, target selection, credential guidance.
-15. **Uninstall wizard parity** — same guided UX model as install.
-16. **Interactive UX tests + sandbox integration tests** — prevent regressions in guided flows.
-17. **Equivalent-command summary in guided mode** — print scriptable command at the end of each workflow.
+1. ✅ **Go module + main.go + Cobra skeleton** — just `mcp-wire --help` works.
+2. ✅ **Service struct + YAML loader + validation** — can parse service files.
+3. ✅ **`list services` command** — first working command, proves the YAML loading.
+4. ✅ **Target interface + Claude Code implementation** — can read/write Claude Code config.
+5. ✅ **`list targets` command** — detects installed tools.
+6. ✅ **Credential resolver (env + file sources)** — can resolve and store tokens.
+7. ✅ **`install` command with interactive prompt** — the core feature, end-to-end flow.
+8. ✅ **`uninstall` command** — straightforward once install works.
+9. ✅ **`status` command** — reads from all targets, displays matrix.
+10. ✅ **Codex target implementation** — second target, validates the abstraction.
+11. ✅ **Initial service YAML files** — ship with 3-5 verified services.
+12. ✅ **README, contributing guide** — explain how to add services and targets.
+13. ✅ **Guided main menu** — `mcp-wire` with no args opens interactive navigation.
+14. ✅ **Install wizard UX** — searchable service picker, target selection, credential guidance.
+15. ✅ **Uninstall wizard parity** — same guided UX model as install.
+16. ✅ **Interactive UX tests + sandbox integration tests** — prevent regressions in guided flows.
+17. ✅ **Equivalent-command summary in guided mode** — print scriptable command at the end of each workflow.
 
 ---
 
@@ -610,7 +610,7 @@ This phase adds optional integration with the Official MCP Registry (`https://re
 - **Latest-only selection**: when a user selects a registry MCP, resolve details from the `latest` version only.
 - **Runtime checks are warnings by default**: missing package managers should warn, not block installation.
 
-### 7.1 — Feature gate and local settings
+### 7.1 — Feature gate and local settings ✅
 
 Add mcp-wire local settings file (for example `~/.config/mcp-wire/config.json`) with:
 
@@ -633,7 +633,7 @@ Acceptance criteria:
 - Fresh install behavior is unchanged.
 - With `registry=false`, all commands and guided flows behave exactly as today.
 
-### 7.2 — Official registry API client (read-only)
+### 7.2 — Official registry API client (read-only) ✅
 
 Create `internal/registry/` for typed API client logic.
 
@@ -649,7 +649,7 @@ Important details:
 - Parse `application/problem+json` errors and return friendly messages.
 - Do not expose historical version selection in this phase.
 
-### 7.3 — Caching and indexing for responsive UX
+### 7.3 — Caching and indexing for responsive UX ✅
 
 Add a local cache/index (for example under `~/.cache/mcp-wire/`) to avoid network-per-keystroke UI.
 
@@ -759,9 +759,9 @@ Requirements:
 
 Suggested order for shipping gradually:
 
-1. Feature gate + settings file + no-registry-references enforcement.
-2. Registry read client + latest-only detail lookup + basic tests.
-3. Cache/index + local search.
+1. ✅ Feature gate + settings file + no-registry-references enforcement.
+2. ✅ Registry read client + latest-only detail lookup + basic tests.
+3. ✅ Cache/index + local search.
 4. `list services` source filter (`curated` default).
 5. Guided UI source step and merged list markers.
 6. Registry remote-install support.
