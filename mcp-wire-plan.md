@@ -665,7 +665,7 @@ Acceptance criteria:
 - Guided and non-guided search feel immediate.
 - Registry API latency does not block every filter action.
 
-### 7.4 — Unified catalog model with explicit source labels
+### 7.4 — Unified catalog model with explicit source labels ✅
 
 Introduce an internal catalog type that supports both curated and registry entries.
 
@@ -676,7 +676,7 @@ Each entry should carry source metadata:
 
 Keep existing `service.Service` and YAML format intact for curated entries.
 
-### 7.5 — Source selection in explicit CLI mode
+### 7.5 — Source selection in explicit CLI mode ✅
 
 When registry is enabled, add source filtering:
 
@@ -692,7 +692,7 @@ When registry is disabled:
 - Do not expose `--source`.
 - Do not mention registry in help/usage text.
 
-### 7.6 — Guided UI changes (only when enabled)
+### 7.6 — Guided UI changes (only when enabled) ✅
 
 Add a source step before service selection:
 
@@ -762,8 +762,8 @@ Suggested order for shipping gradually:
 1. ✅ Feature gate + settings file + no-registry-references enforcement.
 2. ✅ Registry read client + latest-only detail lookup + basic tests.
 3. ✅ Cache/index + local search.
-4. `list services` source filter (`curated` default).
-5. Guided UI source step and merged list markers.
+4. ✅ `list services` source filter (`curated` default).
+5. ✅ Guided UI source step and merged list markers.
 6. Registry remote-install support.
 7. Runtime preflight warnings.
 8. Registry package-install support.
