@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	"github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
@@ -26,10 +27,45 @@ func init() {
 }
 
 func newListServicesCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "services",
 		Short: "List available service definitions",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			source, _ := cmd.Flags().GetString("source")
+
+			if err := validateSource(source); err != nil {
+				return err
+			}
+
+			cfg, err := loadConfig()
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			registryEnabled := cfg.IsFeatureEnabled("registry")
+
+			if !registryEnabled && source != "curated" {
+				return fmt.Errorf("--source requires the registry feature (enable with: mcp-wire feature enable registry)")
+			}
+
+			if registryEnabled && source != "curated" {
+				cat, err := loadCatalog(source, true)
+				if err != nil {
+					return err
+				}
+
+				var entries []catalog.Entry
+				switch source {
+				case "registry":
+					entries = cat.BySource(catalog.SourceRegistry)
+				default:
+					entries = cat.All()
+				}
+
+				printCatalogEntries(cmd.OutOrStdout(), entries)
+				return nil
+			}
+
 			services, err := loadServices()
 			if err != nil {
 				return fmt.Errorf("load services: %w", err)
@@ -39,6 +75,11 @@ func newListServicesCmd() *cobra.Command {
 			return nil
 		},
 	}
+
+	cmd.Flags().String("source", "curated", "filter by source: curated, registry, or all")
+	cmd.Flag("source").Hidden = true
+
+	return cmd
 }
 
 func newListTargetsCmd() *cobra.Command {

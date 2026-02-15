@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
@@ -49,12 +50,19 @@ func runInstallWizardPlain(
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 1/4: Service")
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	registryEnabled := cfg.IsFeatureEnabled("registry")
+
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceInteractive(output, reader, services)
+	svc, err := pickServiceInteractive(output, reader, services, registryEnabled, "curated")
 	if err != nil {
 		return err
 	}
@@ -126,12 +134,19 @@ func runUninstallWizardPlain(
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 1/4: Service")
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	registryEnabled := cfg.IsFeatureEnabled("registry")
+
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceInteractive(output, reader, services)
+	svc, err := pickServiceInteractive(output, reader, services, registryEnabled, "curated")
 	if err != nil {
 		return err
 	}
@@ -213,7 +228,11 @@ func printEquivalentCommand(output ioWriter, command string) {
 	fmt.Fprintln(output)
 }
 
-func pickServiceInteractive(output ioWriter, reader *bufio.Reader, services map[string]service.Service) (service.Service, error) {
+func pickServiceInteractive(output ioWriter, reader *bufio.Reader, services map[string]service.Service, registryEnabled bool, source string) (service.Service, error) {
+	if registryEnabled && source != "curated" {
+		return pickServiceInteractiveCatalog(output, reader, source)
+	}
+
 	if len(services) == 0 {
 		return service.Service{}, errors.New("no service definitions available")
 	}
@@ -260,6 +279,65 @@ func pickServiceInteractive(output ioWriter, reader *bufio.Reader, services map[
 		}
 
 		return matches[index-1], nil
+	}
+}
+
+func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source string) (service.Service, error) {
+	cat, err := loadCatalog(source, true)
+	if err != nil {
+		return service.Service{}, err
+	}
+
+	if cat.Count() == 0 {
+		return service.Service{}, errors.New("no service definitions available")
+	}
+
+	for {
+		search, err := readTrimmedLine(reader, output, "Search (name/description, Enter=all): ")
+		if err != nil {
+			return service.Service{}, fmt.Errorf("read service search: %w", err)
+		}
+
+		matches := cat.Search(search)
+		if len(matches) == 0 {
+			fmt.Fprintf(output, "No services match %q.\n", search)
+			continue
+		}
+
+		fmt.Fprintln(output, "Matches:")
+		for i, entry := range matches {
+			display := strings.TrimSpace(entry.Description())
+			if display == "" {
+				display = entry.Name
+			}
+
+			tag := ""
+			if entry.Source == catalog.SourceRegistry {
+				tag = " [registry]"
+			}
+
+			fmt.Fprintf(output, "  %d) %s%s (%s)\n", i+1, entry.Name, tag, display)
+		}
+
+		selection, err := readTrimmedLine(reader, output, "Service number: ")
+		if err != nil {
+			return service.Service{}, fmt.Errorf("read service selection: %w", err)
+		}
+
+		index, err := strconv.Atoi(selection)
+		if err != nil || index < 1 || index > len(matches) {
+			fmt.Fprintln(output, "Invalid selection.")
+			continue
+		}
+
+		selected := matches[index-1]
+		svc, ok := catalogEntryToService(selected)
+		if !ok {
+			fmt.Fprintln(output, "Registry services cannot be installed yet. Choose a curated service.")
+			continue
+		}
+
+		return svc, nil
 	}
 }
 

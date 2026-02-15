@@ -3,9 +3,12 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/andreagrandi/mcp-wire/internal/config"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
@@ -59,7 +62,9 @@ func TestListServicesCommandPrintsSortedServices(t *testing.T) {
 		}, nil
 	}
 
-	output, err := executeRootCommand(t, "list", "services")
+	stubConfigWithRegistry(t, false)
+
+	output, err := executeRootCommand(t, "list", "services", "--source", "curated")
 	if err != nil {
 		t.Fatalf("expected list services command to succeed: %v", err)
 	}
@@ -89,7 +94,9 @@ func TestListServicesCommandPrintsEmptyState(t *testing.T) {
 		return map[string]service.Service{}, nil
 	}
 
-	output, err := executeRootCommand(t, "list", "services")
+	stubConfigWithRegistry(t, false)
+
+	output, err := executeRootCommand(t, "list", "services", "--source", "curated")
 	if err != nil {
 		t.Fatalf("expected list services command to succeed: %v", err)
 	}
@@ -109,7 +116,9 @@ func TestListServicesCommandReturnsLoaderError(t *testing.T) {
 		return nil, errors.New("loader failed")
 	}
 
-	_, err := executeRootCommand(t, "list", "services")
+	stubConfigWithRegistry(t, false)
+
+	_, err := executeRootCommand(t, "list", "services", "--source", "curated")
 	if err == nil {
 		t.Fatal("expected list services command to fail")
 	}
@@ -192,6 +201,152 @@ func TestListTargetsCommandPrintsEmptyState(t *testing.T) {
 
 	if !strings.Contains(output, "(none)") {
 		t.Fatalf("expected empty state marker, got %q", output)
+	}
+}
+
+func stubConfigWithRegistry(t *testing.T, enabled bool) {
+	t.Helper()
+
+	configPath := filepath.Join(t.TempDir(), "config.json")
+
+	originalConfig := loadConfig
+	t.Cleanup(func() { loadConfig = originalConfig })
+
+	loadConfig = func() (*config.Config, error) {
+		cfg, err := config.LoadFrom(configPath)
+		if err != nil {
+			return nil, err
+		}
+
+		if enabled {
+			if err := cfg.SetFeature("registry", true); err != nil {
+				return nil, err
+			}
+		}
+
+		return cfg, nil
+	}
+}
+
+func TestListServicesSourceAllWithRegistryEnabled(t *testing.T) {
+	originalLoadServices := loadServices
+	t.Cleanup(func() { loadServices = originalLoadServices })
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"alpha": {Name: "alpha", Description: "Alpha service"},
+		}, nil
+	}
+
+	originalLoadRegistryCache := loadRegistryCache
+	t.Cleanup(func() { loadRegistryCache = originalLoadRegistryCache })
+
+	loadRegistryCache = func() []registry.ServerResponse {
+		return []registry.ServerResponse{
+			{Server: registry.ServerJSON{Name: "beta", Description: "Beta from registry"}},
+		}
+	}
+
+	stubConfigWithRegistry(t, true)
+
+	output, err := executeRootCommand(t, "list", "services", "--source", "all")
+	if err != nil {
+		t.Fatalf("expected command to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "alpha") {
+		t.Fatalf("expected curated service in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "beta [registry]") {
+		t.Fatalf("expected registry service with tag in output, got %q", output)
+	}
+}
+
+func TestListServicesSourceRegistryWithRegistryEnabled(t *testing.T) {
+	originalLoadServices := loadServices
+	t.Cleanup(func() { loadServices = originalLoadServices })
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"alpha": {Name: "alpha", Description: "Alpha service"},
+		}, nil
+	}
+
+	originalLoadRegistryCache := loadRegistryCache
+	t.Cleanup(func() { loadRegistryCache = originalLoadRegistryCache })
+
+	loadRegistryCache = func() []registry.ServerResponse {
+		return []registry.ServerResponse{
+			{Server: registry.ServerJSON{Name: "beta", Description: "Beta from registry"}},
+		}
+	}
+
+	stubConfigWithRegistry(t, true)
+
+	output, err := executeRootCommand(t, "list", "services", "--source", "registry")
+	if err != nil {
+		t.Fatalf("expected command to succeed: %v", err)
+	}
+
+	if strings.Contains(output, "alpha") {
+		t.Fatalf("expected no curated services in registry-only output, got %q", output)
+	}
+
+	if !strings.Contains(output, "beta") {
+		t.Fatalf("expected registry service in output, got %q", output)
+	}
+}
+
+func TestListServicesDefaultSourceUnchanged(t *testing.T) {
+	originalLoadServices := loadServices
+	t.Cleanup(func() { loadServices = originalLoadServices })
+
+	loadServices = func(_ ...string) (map[string]service.Service, error) {
+		return map[string]service.Service{
+			"alpha": {Name: "alpha", Description: "Alpha service"},
+		}, nil
+	}
+
+	stubConfigWithRegistry(t, false)
+
+	output, err := executeRootCommand(t, "list", "services", "--source", "curated")
+	if err != nil {
+		t.Fatalf("expected command to succeed: %v", err)
+	}
+
+	if !strings.Contains(output, "alpha") {
+		t.Fatalf("expected curated service in default output, got %q", output)
+	}
+
+	if !strings.Contains(output, "Available services:") {
+		t.Fatalf("expected heading in output, got %q", output)
+	}
+}
+
+func TestListServicesInvalidSourceReturnsError(t *testing.T) {
+	stubConfigWithRegistry(t, true)
+
+	_, err := executeRootCommand(t, "list", "services", "--source", "bogus")
+	if err == nil {
+		t.Fatal("expected error for invalid --source value")
+	}
+
+	if !strings.Contains(err.Error(), "invalid --source value") {
+		t.Fatalf("expected validation error, got %v", err)
+	}
+}
+
+func TestListServicesSourceAllWithRegistryDisabledReturnsError(t *testing.T) {
+	stubConfigWithRegistry(t, false)
+
+	_, err := executeRootCommand(t, "list", "services", "--source", "all")
+	if err == nil {
+		t.Fatal("expected error when using --source with registry disabled")
+	}
+
+	if !strings.Contains(err.Error(), "--source requires the registry feature") {
+		t.Fatalf("expected feature flag error, got %v", err)
 	}
 }
 

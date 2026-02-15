@@ -11,6 +11,7 @@ import (
 	"github.com/AlecAivazis/survey/v2"
 	surveycore "github.com/AlecAivazis/survey/v2/core"
 	surveyterminal "github.com/AlecAivazis/survey/v2/terminal"
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/spf13/cobra"
@@ -111,6 +112,13 @@ func runInstallWizardSurvey(
 	fmt.Fprintln(output, "Install Wizard")
 	fmt.Fprintln(output)
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	registryEnabled := cfg.IsFeatureEnabled("registry")
+
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
@@ -120,7 +128,7 @@ serviceStep:
 	for {
 		fmt.Fprintln(output, "Step 1/4: Service")
 
-		svc, err := pickServiceSurvey(cmd, services)
+		svc, err := pickServiceSurvey(cmd, services, registryEnabled, "curated")
 		if err != nil {
 			if errors.Is(err, errWizardBack) {
 				fmt.Fprintln(output, "Install cancelled.")
@@ -222,6 +230,13 @@ func runUninstallWizardSurvey(
 	fmt.Fprintln(output, "Uninstall Wizard")
 	fmt.Fprintln(output)
 
+	cfg, err := loadConfig()
+	if err != nil {
+		return fmt.Errorf("load config: %w", err)
+	}
+
+	registryEnabled := cfg.IsFeatureEnabled("registry")
+
 	services, err := loadServices()
 	if err != nil {
 		return fmt.Errorf("load services: %w", err)
@@ -231,7 +246,7 @@ serviceStep:
 	for {
 		fmt.Fprintln(output, "Step 1/4: Service")
 
-		svc, err := pickServiceSurvey(cmd, services)
+		svc, err := pickServiceSurvey(cmd, services, registryEnabled, "curated")
 		if err != nil {
 			if errors.Is(err, errWizardBack) {
 				fmt.Fprintln(output, "Uninstall cancelled.")
@@ -377,7 +392,11 @@ func resolveScopeForSurveyWizard(
 	return targetpkg.ConfigScopeUser, nil
 }
 
-func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service) (service.Service, error) {
+func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service, registryEnabled bool, source string) (service.Service, error) {
+	if registryEnabled && source != "curated" {
+		return pickServiceSurveyCatalog(cmd, source)
+	}
+
 	if len(services) == 0 {
 		return service.Service{}, errors.New("no service definitions available")
 	}
@@ -431,6 +450,73 @@ func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service) 
 	}
 
 	return svc, nil
+}
+
+func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Service, error) {
+	cat, err := loadCatalog(source, true)
+	if err != nil {
+		return service.Service{}, err
+	}
+
+	entries := cat.All()
+	if len(entries) == 0 {
+		return service.Service{}, errors.New("no service definitions available")
+	}
+
+	for {
+		labels := make([]string, 0, len(entries))
+		entryByLabel := make(map[string]catalog.Entry, len(entries))
+
+		for _, entry := range entries {
+			description := strings.TrimSpace(entry.Description())
+			if description == "" {
+				description = entry.Name
+			}
+
+			tag := ""
+			if entry.Source == catalog.SourceRegistry {
+				tag = " [registry]"
+			}
+
+			label := fmt.Sprintf("%s%s - %s", entry.Name, tag, description)
+			labels = append(labels, label)
+			entryByLabel[label] = entry
+		}
+
+		selectedLabel := ""
+		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Type to filter. Esc goes back.")
+
+		prompt := &survey.Select{
+			Message:  "Select service",
+			Options:  labels,
+			PageSize: 10,
+			Filter: func(filter string, value string, _ int) bool {
+				if strings.TrimSpace(filter) == "" {
+					return true
+				}
+
+				return strings.Contains(strings.ToLower(value), strings.ToLower(filter))
+			},
+			FilterMessage: "Filter:",
+		}
+
+		if err := askSurveyPrompt(cmd, prompt, &selectedLabel); err != nil {
+			return service.Service{}, fmt.Errorf("read service selection: %w", err)
+		}
+
+		selected, found := entryByLabel[selectedLabel]
+		if !found {
+			return service.Service{}, fmt.Errorf("selected service %q not found", selectedLabel)
+		}
+
+		svc, ok := catalogEntryToService(selected)
+		if !ok {
+			fmt.Fprintln(cmd.OutOrStdout(), "Registry services cannot be installed yet. Choose a curated service.")
+			continue
+		}
+
+		return svc, nil
+	}
 }
 
 func resolveTargetsForSurveyWizard(cmd *cobra.Command, targetSlugs []string) ([]targetpkg.Target, error) {

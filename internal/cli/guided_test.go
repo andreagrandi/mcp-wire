@@ -71,7 +71,7 @@ func TestPickServiceInteractiveSupportsSearch(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader("doc\n1\n"))
 	var output bytes.Buffer
 
-	svc, err := pickServiceInteractive(&output, reader, services)
+	svc, err := pickServiceInteractive(&output, reader, services, false, "curated")
 	if err != nil {
 		t.Fatalf("expected service picker to succeed: %v", err)
 	}
