@@ -266,3 +266,46 @@ func TestLoadUsesDefaultPath(t *testing.T) {
 		t.Fatal("expected non-nil config from Load()")
 	}
 }
+
+func TestSetFeaturePreservesUnknownTopLevelKeys(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	content := `{"custom_setting":"keep-me","features":{"registry":false}}`
+
+	if err := os.WriteFile(configPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadFrom(configPath)
+	if err != nil {
+		t.Fatalf("expected load to succeed: %v", err)
+	}
+
+	if err := cfg.SetFeature("registry", true); err != nil {
+		t.Fatalf("expected set to succeed: %v", err)
+	}
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("expected config file to be readable: %v", err)
+	}
+
+	var parsed map[string]any
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("expected valid JSON on disk: %v", err)
+	}
+
+	customVal, ok := parsed["custom_setting"].(string)
+	if !ok || customVal != "keep-me" {
+		t.Fatalf("expected custom_setting to be preserved, got %v", parsed["custom_setting"])
+	}
+
+	features, ok := parsed["features"].(map[string]any)
+	if !ok {
+		t.Fatal("expected features key in JSON")
+	}
+
+	registry, ok := features["registry"].(bool)
+	if !ok || !registry {
+		t.Fatal("expected registry=true in JSON")
+	}
+}

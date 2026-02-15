@@ -617,7 +617,7 @@ Add mcp-wire local settings file (for example `~/.config/mcp-wire/config.json`) 
 ```json
 {
   "features": {
-    "registry_enabled": false
+    "registry": false
   }
 }
 ```
@@ -631,7 +631,7 @@ Suggested commands:
 Acceptance criteria:
 
 - Fresh install behavior is unchanged.
-- With `registry_enabled=false`, all commands and guided flows behave exactly as today.
+- With `registry=false`, all commands and guided flows behave exactly as today.
 
 ### 7.2 — Official registry API client (read-only)
 

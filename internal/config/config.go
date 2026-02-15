@@ -34,6 +34,7 @@ type FeatureDefinition struct {
 // Config holds mcp-wire local settings.
 type Config struct {
 	path     string
+	raw      map[string]json.RawMessage
 	features map[string]bool
 }
 
@@ -54,6 +55,7 @@ func LoadFrom(path string) (*Config, error) {
 
 	cfg := &Config{
 		path:     resolved,
+		raw:      make(map[string]json.RawMessage),
 		features: make(map[string]bool),
 	}
 
@@ -66,12 +68,11 @@ func LoadFrom(path string) (*Config, error) {
 		return nil, fmt.Errorf("read config file %q: %w", resolved, err)
 	}
 
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(data, &raw); err != nil {
+	if err := json.Unmarshal(data, &cfg.raw); err != nil {
 		return nil, fmt.Errorf("parse config file %q: %w", resolved, err)
 	}
 
-	featuresRaw, ok := raw["features"]
+	featuresRaw, ok := cfg.raw["features"]
 	if ok {
 		var featMap map[string]bool
 		if err := json.Unmarshal(featuresRaw, &featMap); err != nil {
@@ -160,11 +161,14 @@ func (c *Config) save() error {
 		return fmt.Errorf("create config directory %q: %w", configDir, err)
 	}
 
-	payload := map[string]any{
-		"features": c.features,
+	featuresJSON, err := json.Marshal(c.features)
+	if err != nil {
+		return fmt.Errorf("marshal features: %w", err)
 	}
 
-	data, err := json.MarshalIndent(payload, "", "  ")
+	c.raw["features"] = featuresJSON
+
+	data, err := json.MarshalIndent(c.raw, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
