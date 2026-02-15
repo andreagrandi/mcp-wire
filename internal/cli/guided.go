@@ -131,7 +131,7 @@ func runInstallWizardPlain(
 		return err
 	}
 
-	confirmed, err := confirmInstallSelection(output, reader, svc, targetDefinitions, noPrompt, selectedScope)
+	confirmed, err := confirmInstallSelection(output, reader, svc, targetDefinitions, noPrompt, selectedScope, nil)
 	if err != nil {
 		return err
 	}
@@ -415,6 +415,20 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 		}
 
 		selected := matches[index-1]
+
+		if selected.Source == catalog.SourceRegistry {
+			printRegistryTrustSummary(output, selected)
+
+			confirmed, confirmErr := askYesNo(reader, output, "Proceed with this registry service? [y/N]: ", false)
+			if confirmErr != nil {
+				return service.Service{}, fmt.Errorf("read registry confirmation: %w", confirmErr)
+			}
+
+			if !confirmed {
+				continue
+			}
+		}
+
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {
@@ -559,6 +573,7 @@ func confirmInstallSelection(
 	targetDefinitions []targetpkg.Target,
 	noPrompt bool,
 	scope targetpkg.ConfigScope,
+	registryEntry *catalog.Entry,
 ) (bool, error) {
 	fmt.Fprintln(output)
 	fmt.Fprintln(output, "Step 3/4: Review")
@@ -571,6 +586,10 @@ func confirmInstallSelection(
 	fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
 	if anyTargetSupportsProjectScope(targetDefinitions) {
 		fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(scope))
+	}
+
+	if registryEntry != nil && registryEntry.Source == catalog.SourceRegistry {
+		printRegistryTrustSummary(output, *registryEntry)
 	}
 
 	confirmed, err := askYesNo(reader, output, "Apply changes? [Y/n]: ", true)

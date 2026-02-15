@@ -333,3 +333,265 @@ func TestLoadCatalogEmptyRegistryCache(t *testing.T) {
 		t.Fatalf("expected 2 curated entries when cache is empty, got %d", len(entries))
 	}
 }
+
+func TestPrintRegistryTrustSummaryShowsSource(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "test-server",
+				Description: "A test server",
+				Version:     "1.0.0",
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://example.com/sse"},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Registry Service Information:") {
+		t.Fatalf("expected header in output, got %q", output)
+	}
+	if !strings.Contains(output, "registry (community, not vetted by mcp-wire)") {
+		t.Fatalf("expected source line in output, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryShowsInstallType(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://example.com/sse"},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Install:   remote") {
+		t.Fatalf("expected install type in output, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryShowsTransport(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Remotes: []registry.Transport{
+					{Type: "streamable-http", URL: "https://example.com/mcp"},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Transport: streamable-http") {
+		t.Fatalf("expected transport in output, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryShowsSecrets(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Remotes: []registry.Transport{
+					{
+						Type: "sse",
+						URL:  "https://example.com/sse",
+						Headers: []registry.KeyValueInput{
+							{Name: "Authorization", IsSecret: true, IsRequired: true},
+							{Name: "X-API-Key", IsSecret: true, IsRequired: true},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Secrets:   Authorization, X-API-Key") {
+		t.Fatalf("expected secrets in output, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryShowsRepoURL(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Repository: &registry.Repository{
+					URL: "https://github.com/example/repo",
+				},
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://example.com/sse"},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Repo:      https://github.com/example/repo") {
+		t.Fatalf("expected repo URL in output, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryExcludesOptionalSecrets(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Packages: []registry.Package{
+					{
+						RegistryType: "npm",
+						Identifier:   "@example/server",
+						Transport:    registry.Transport{Type: "stdio"},
+						EnvironmentVariables: []registry.KeyValueInput{
+							{Name: "REQ_TOKEN", IsRequired: true},
+							{Name: "OPT_TOKEN", IsRequired: false},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Secrets:   REQ_TOKEN") {
+		t.Fatalf("expected required secret in output, got %q", output)
+	}
+	if strings.Contains(output, "OPT_TOKEN") {
+		t.Fatalf("expected optional secret excluded, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryOmitsSecretsWhenAllOptional(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Packages: []registry.Package{
+					{
+						RegistryType: "npm",
+						Identifier:   "@example/server",
+						Transport:    registry.Transport{Type: "stdio"},
+						EnvironmentVariables: []registry.KeyValueInput{
+							{Name: "OPT_A", IsRequired: false},
+							{Name: "OPT_B", IsRequired: false},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if strings.Contains(output, "Secrets:") {
+		t.Fatalf("expected no secrets line when all are optional, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryOmitsEmptyFields(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if strings.Contains(output, "Install:") {
+		t.Fatalf("expected no install line for empty install type, got %q", output)
+	}
+	if strings.Contains(output, "Transport:") {
+		t.Fatalf("expected no transport line for empty transport, got %q", output)
+	}
+	if strings.Contains(output, "Secrets:") {
+		t.Fatalf("expected no secrets line for no env vars, got %q", output)
+	}
+	if strings.Contains(output, "Repo:") {
+		t.Fatalf("expected no repo line for no repo URL, got %q", output)
+	}
+}
+
+func TestPrintRegistryTrustSummaryPackageInstallType(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Packages: []registry.Package{
+					{
+						RegistryType: "npm",
+						Identifier:   "@example/server",
+						Transport:    registry.Transport{Type: "stdio"},
+					},
+				},
+			},
+		},
+	}
+
+	var buf bytes.Buffer
+	printRegistryTrustSummary(&buf, entry)
+	output := buf.String()
+
+	if !strings.Contains(output, "Install:   package") {
+		t.Fatalf("expected package install type, got %q", output)
+	}
+	if !strings.Contains(output, "Transport: stdio") {
+		t.Fatalf("expected stdio transport, got %q", output)
+	}
+}

@@ -604,6 +604,32 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 			return service.Service{}, fmt.Errorf("selected service %q not found", selectedLabel)
 		}
 
+		if selected.Source == catalog.SourceRegistry {
+			printRegistryTrustSummary(cmd.OutOrStdout(), selected)
+
+			confirmChoice := ""
+			printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+			confirmPrompt := &survey.Select{
+				Message:  "Proceed with this registry service?",
+				Options:  []string{"Yes", "No"},
+				Default:  "No",
+				PageSize: 2,
+			}
+
+			if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+				if errors.Is(err, errWizardBack) {
+					continue
+				}
+
+				return service.Service{}, fmt.Errorf("read registry confirmation: %w", err)
+			}
+
+			if confirmChoice != "Yes" {
+				continue
+			}
+		}
+
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {

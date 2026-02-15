@@ -154,6 +154,40 @@ func (e Entry) HasPackages() bool {
 	return false
 }
 
+// InstallType returns "remote", "package", or "remote/package"
+// describing how this entry would be installed.
+func (e Entry) InstallType() string {
+	hasRemotes := e.HasRemotes()
+	hasPackages := e.HasPackages()
+	if hasRemotes && hasPackages {
+		return "remote/package"
+	}
+	if hasRemotes {
+		return "remote"
+	}
+	if hasPackages {
+		return "package"
+	}
+	return ""
+}
+
+// PackageTypes returns the package registry types (e.g., "npm", "pypi")
+// for registry entries. Returns nil for curated entries.
+func (e Entry) PackageTypes() []string {
+	if e.Registry == nil {
+		return nil
+	}
+	var types []string
+	seen := make(map[string]bool)
+	for _, pkg := range e.Registry.Server.Packages {
+		if pkg.RegistryType != "" && !seen[pkg.RegistryType] {
+			types = append(types, pkg.RegistryType)
+			seen[pkg.RegistryType] = true
+		}
+	}
+	return types
+}
+
 // envVarsFromRegistry extracts environment variables from a registry
 // server response, combining package env vars and secret remote headers.
 func envVarsFromRegistry(resp *registry.ServerResponse) []service.EnvVar {

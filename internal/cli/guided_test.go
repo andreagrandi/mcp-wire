@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
@@ -135,7 +137,7 @@ func TestPickServiceInteractiveCatalogRegistryOnlyReturnsError(t *testing.T) {
 	stubLoadServicesForCatalog(t)
 	stubLoadRegistryCache(t, fakeRegistryServers())
 
-	reader := bufio.NewReader(strings.NewReader("\n1\n"))
+	reader := bufio.NewReader(strings.NewReader("\n1\ny\n"))
 	var output bytes.Buffer
 
 	_, err := pickServiceInteractiveCatalog(&output, reader, "registry")
@@ -143,8 +145,165 @@ func TestPickServiceInteractiveCatalogRegistryOnlyReturnsError(t *testing.T) {
 		t.Fatalf("expected errRegistryOnly, got %v", err)
 	}
 
+	if !strings.Contains(output.String(), "Registry Service Information:") {
+		t.Fatalf("expected trust summary in output, got %q", output.String())
+	}
+
 	if !strings.Contains(output.String(), "Registry services cannot be installed yet") {
 		t.Fatalf("expected rejection message, got %q", output.String())
+	}
+}
+
+func TestPickServiceInteractiveCatalogDeclineTrustGoesBack(t *testing.T) {
+	stubLoadServicesForCatalog(t)
+	stubLoadRegistryCache(t, []registry.ServerResponse{
+		{
+			Server: registry.ServerJSON{
+				Name:        "gamma",
+				Description: "Gamma from registry",
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://gamma.example.com/sse"},
+				},
+			},
+		},
+	})
+
+	// Search all, select 1 (gamma), decline trust, search all again, select 1, accept trust
+	reader := bufio.NewReader(strings.NewReader("\n1\nn\n\n1\ny\n"))
+	var output bytes.Buffer
+
+	_, err := pickServiceInteractiveCatalog(&output, reader, "registry")
+	if !errors.Is(err, errRegistryOnly) {
+		t.Fatalf("expected errRegistryOnly, got %v", err)
+	}
+
+	outputStr := output.String()
+
+	// Trust summary should appear twice (once per selection attempt)
+	firstIdx := strings.Index(outputStr, "Registry Service Information:")
+	if firstIdx == -1 {
+		t.Fatalf("expected trust summary in output, got %q", outputStr)
+	}
+
+	secondIdx := strings.Index(outputStr[firstIdx+1:], "Registry Service Information:")
+	if secondIdx == -1 {
+		t.Fatalf("expected second trust summary after declining, got %q", outputStr)
+	}
+}
+
+func TestPickServiceInteractiveCatalogTrustSummaryShowsTransport(t *testing.T) {
+	stubLoadServicesForCatalog(t)
+	stubLoadRegistryCache(t, []registry.ServerResponse{
+		{
+			Server: registry.ServerJSON{
+				Name:        "gamma",
+				Description: "Gamma from registry",
+				Version:     "1.0.0",
+				Remotes: []registry.Transport{
+					{Type: "streamable-http", URL: "https://gamma.example.com/mcp"},
+				},
+				Repository: &registry.Repository{
+					URL: "https://github.com/example/gamma",
+				},
+			},
+		},
+	})
+
+	reader := bufio.NewReader(strings.NewReader("\n1\ny\n"))
+	var output bytes.Buffer
+
+	_, _ = pickServiceInteractiveCatalog(&output, reader, "registry")
+	outputStr := output.String()
+
+	if !strings.Contains(outputStr, "Transport: streamable-http") {
+		t.Fatalf("expected transport in trust summary, got %q", outputStr)
+	}
+
+	if !strings.Contains(outputStr, "Repo:      https://github.com/example/gamma") {
+		t.Fatalf("expected repo URL in trust summary, got %q", outputStr)
+	}
+}
+
+func TestPickServiceInteractiveCatalogNoTrustForCurated(t *testing.T) {
+	stubLoadServicesForCatalog(t)
+	stubLoadRegistryCache(t, fakeRegistryServers())
+
+	// source="all": curated alpha, beta + registry gamma, delta
+	// Select alpha (curated) -> should NOT show trust summary
+	reader := bufio.NewReader(strings.NewReader("alpha\n1\n"))
+	var output bytes.Buffer
+
+	svc, err := pickServiceInteractiveCatalog(&output, reader, "all")
+	if err != nil {
+		t.Fatalf("expected curated service to succeed: %v", err)
+	}
+
+	if svc.Name != "alpha" {
+		t.Fatalf("expected alpha, got %q", svc.Name)
+	}
+
+	if strings.Contains(output.String(), "Registry Service Information:") {
+		t.Fatalf("expected no trust summary for curated entry, got %q", output.String())
+	}
+}
+
+func TestConfirmInstallSelectionShowsTrustForRegistry(t *testing.T) {
+	entry := &catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:    "test-server",
+				Version: "1.0.0",
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://example.com/sse"},
+				},
+			},
+		},
+	}
+
+	svc := service.Service{Name: "test-server"}
+	targets := []targetpkg.Target{
+		fakeListTarget{name: "TestTarget", slug: "test", installed: true},
+	}
+
+	reader := bufio.NewReader(strings.NewReader("y\n"))
+	var output bytes.Buffer
+
+	confirmed, err := confirmInstallSelection(&output, reader, svc, targets, false, targetpkg.ConfigScopeUser, entry)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !confirmed {
+		t.Fatal("expected confirmation to succeed")
+	}
+
+	if !strings.Contains(output.String(), "Registry Service Information:") {
+		t.Fatalf("expected trust summary in confirmation output, got %q", output.String())
+	}
+}
+
+func TestConfirmInstallSelectionNoTrustForCurated(t *testing.T) {
+	svc := service.Service{Name: "test-service"}
+	targets := []targetpkg.Target{
+		fakeListTarget{name: "TestTarget", slug: "test", installed: true},
+	}
+
+	reader := bufio.NewReader(strings.NewReader("y\n"))
+	var output bytes.Buffer
+
+	confirmed, err := confirmInstallSelection(&output, reader, svc, targets, false, targetpkg.ConfigScopeUser, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !confirmed {
+		t.Fatal("expected confirmation to succeed")
+	}
+
+	if strings.Contains(output.String(), "Registry Service Information:") {
+		t.Fatalf("expected no trust summary for nil entry, got %q", output.String())
 	}
 }
 

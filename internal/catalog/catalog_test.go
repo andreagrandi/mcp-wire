@@ -689,3 +689,128 @@ func TestCount(t *testing.T) {
 		t.Fatalf("expected count=2, got %d", cat.Count())
 	}
 }
+
+func TestInstallTypeRemote(t *testing.T) {
+	entry := FromRegistry(sampleRegistryServer("ns/a", "A", "Server A"))
+	if entry.InstallType() != "remote" {
+		t.Fatalf("expected install type=%q, got %q", "remote", entry.InstallType())
+	}
+}
+
+func TestInstallTypePackage(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/a",
+			Version: "1.0.0",
+			Packages: []registry.Package{
+				{RegistryType: "npm", Identifier: "@example/server", Transport: registry.Transport{Type: "stdio"}},
+			},
+		},
+	}
+	entry := FromRegistry(resp)
+	if entry.InstallType() != "package" {
+		t.Fatalf("expected install type=%q, got %q", "package", entry.InstallType())
+	}
+}
+
+func TestInstallTypeRemoteAndPackage(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/a",
+			Version: "1.0.0",
+			Remotes: []registry.Transport{
+				{Type: "sse", URL: "https://example.com/sse"},
+			},
+			Packages: []registry.Package{
+				{RegistryType: "npm", Identifier: "@example/server", Transport: registry.Transport{Type: "stdio"}},
+			},
+		},
+	}
+	entry := FromRegistry(resp)
+	if entry.InstallType() != "remote/package" {
+		t.Fatalf("expected install type=%q, got %q", "remote/package", entry.InstallType())
+	}
+}
+
+func TestInstallTypeEmpty(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/empty",
+			Version: "1.0.0",
+		},
+	}
+	entry := FromRegistry(resp)
+	if entry.InstallType() != "" {
+		t.Fatalf("expected empty install type, got %q", entry.InstallType())
+	}
+}
+
+func TestInstallTypeCurated(t *testing.T) {
+	svc := service.Service{Name: "test", Transport: "sse"}
+	entry := FromCurated(svc)
+	if entry.InstallType() != "remote" {
+		t.Fatalf("expected install type=%q for curated sse, got %q", "remote", entry.InstallType())
+	}
+}
+
+func TestPackageTypesRegistry(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/a",
+			Version: "1.0.0",
+			Packages: []registry.Package{
+				{RegistryType: "npm", Identifier: "@example/server-a"},
+				{RegistryType: "pypi", Identifier: "example-server"},
+			},
+		},
+	}
+	entry := FromRegistry(resp)
+	types := entry.PackageTypes()
+
+	if len(types) != 2 {
+		t.Fatalf("expected 2 package types, got %d", len(types))
+	}
+	if types[0] != "npm" {
+		t.Fatalf("expected first type=%q, got %q", "npm", types[0])
+	}
+	if types[1] != "pypi" {
+		t.Fatalf("expected second type=%q, got %q", "pypi", types[1])
+	}
+}
+
+func TestPackageTypesDeduplication(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/a",
+			Version: "1.0.0",
+			Packages: []registry.Package{
+				{RegistryType: "npm", Identifier: "@example/server-a"},
+				{RegistryType: "npm", Identifier: "@example/server-b"},
+			},
+		},
+	}
+	entry := FromRegistry(resp)
+	types := entry.PackageTypes()
+
+	if len(types) != 1 {
+		t.Fatalf("expected 1 deduplicated package type, got %d", len(types))
+	}
+}
+
+func TestPackageTypesCurated(t *testing.T) {
+	entry := FromCurated(sampleService("test", "test"))
+	types := entry.PackageTypes()
+
+	if types != nil {
+		t.Fatalf("expected nil package types for curated entry, got %v", types)
+	}
+}
+
+func TestPackageTypesNoPackages(t *testing.T) {
+	entry := FromRegistry(sampleRegistryServer("ns/a", "A", "Server A"))
+	types := entry.PackageTypes()
+
+	if types != nil {
+		t.Fatalf("expected nil package types for entry without packages, got %v", types)
+	}
+}

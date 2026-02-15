@@ -120,6 +120,31 @@ func validateSource(source string) error {
 	return nil
 }
 
+func printRegistryTrustSummary(output io.Writer, entry catalog.Entry) {
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "Registry Service Information:")
+	fmt.Fprintf(output, "  Source:    %s (community, not vetted by mcp-wire)\n", entry.Source)
+	if installType := entry.InstallType(); installType != "" {
+		fmt.Fprintf(output, "  Install:   %s\n", installType)
+	}
+	if transport := entry.Transport(); transport != "" {
+		fmt.Fprintf(output, "  Transport: %s\n", transport)
+	}
+	var secretNames []string
+	for _, v := range entry.EnvVars() {
+		if v.Required {
+			secretNames = append(secretNames, v.Name)
+		}
+	}
+	if len(secretNames) > 0 {
+		fmt.Fprintf(output, "  Secrets:   %s\n", strings.Join(secretNames, ", "))
+	}
+	if repoURL := entry.RepositoryURL(); repoURL != "" {
+		fmt.Fprintf(output, "  Repo:      %s\n", repoURL)
+	}
+	fmt.Fprintln(output)
+}
+
 func catalogEntryToService(entry catalog.Entry) (service.Service, bool) {
 	if entry.Source == catalog.SourceCurated && entry.Curated != nil {
 		return *entry.Curated, true
