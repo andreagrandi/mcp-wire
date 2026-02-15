@@ -14,12 +14,8 @@ import (
 var loadRegistryCache = defaultLoadRegistryCache
 
 func defaultLoadRegistryCache() []registry.ServerResponse {
-	cache := registry.NewCache(nil)
-	if err := cache.Load(); err != nil {
-		return nil
-	}
-
-	return cache.All()
+	ensureRegistrySyncStarted(true)
+	return loadRegistryServersSnapshot()
 }
 
 var fetchServerLatest = defaultFetchServerLatest

@@ -7,6 +7,7 @@ import (
 	"os"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	surveycore "github.com/AlecAivazis/survey/v2/core"
@@ -540,21 +541,32 @@ func pickServiceSurvey(cmd *cobra.Command, services map[string]service.Service, 
 }
 
 func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Service, error) {
-	cat, err := loadCatalog(source, true)
-	if err != nil {
-		return service.Service{}, err
-	}
-
-	entries := cat.All()
-	if len(entries) == 0 {
-		return service.Service{}, errors.New("no service definitions available")
-	}
-
 	showMarkers := source == "all"
+	output := cmd.OutOrStdout()
+
+	waitForRegistrySyncInSurvey(output, 45*time.Second)
 
 	for {
+		cat, err := loadCatalog(source, true)
+		if err != nil {
+			return service.Service{}, err
+		}
+
+		statusLine := registrySyncStatusLine(true)
+		if statusLine != "" {
+			fmt.Fprintln(output, statusLine)
+		}
+
+		entries := cat.All()
+		if len(entries) == 0 {
+			return service.Service{}, errors.New("no service definitions available")
+		}
+
 		labels := make([]string, 0, len(entries))
 		entryByLabel := make(map[string]catalog.Entry, len(entries))
+
+		const filterHintOption = "< Start typing to filter >"
+		labels = append(labels, filterHintOption)
 
 		for _, entry := range entries {
 			description := strings.TrimSpace(entry.Description())
@@ -575,28 +587,43 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 		}
 
 		if showMarkers {
-			fmt.Fprintln(cmd.OutOrStdout(), "(* = curated by mcp-wire)")
+			fmt.Fprintln(output, "(* = curated by mcp-wire)")
 		}
 
 		selectedLabel := ""
-		printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Type to filter. Esc goes back.")
+		printSurveyHint(output, "Use Up/Down arrows, Enter to select. Type to filter. Esc goes back.")
+		printSurveyHint(output, "Filter text appears after: Search >")
 
 		prompt := &survey.Select{
 			Message:  "Select service",
 			Options:  labels,
+			Default:  filterHintOption,
 			PageSize: 10,
 			Filter: func(filter string, value string, _ int) bool {
-				if strings.TrimSpace(filter) == "" {
+				trimmed := strings.TrimSpace(filter)
+				if value == filterHintOption {
+					return trimmed == ""
+				}
+
+				if trimmed == "" {
 					return true
 				}
 
-				return strings.Contains(strings.ToLower(value), strings.ToLower(filter))
+				return strings.Contains(strings.ToLower(value), strings.ToLower(trimmed))
 			},
-			FilterMessage: "Filter:",
+			FilterMessage: "Search > ",
 		}
 
 		if err := askSurveyPrompt(cmd, prompt, &selectedLabel); err != nil {
+			if errors.Is(err, errWizardBack) {
+				return service.Service{}, errWizardBack
+			}
+
 			return service.Service{}, fmt.Errorf("read service selection: %w", err)
+		}
+
+		if selectedLabel == filterHintOption {
+			continue
 		}
 
 		selected, found := entryByLabel[selectedLabel]
@@ -605,10 +632,10 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 		}
 
 		if selected.Source == catalog.SourceRegistry {
-			printRegistryTrustSummary(cmd.OutOrStdout(), selected)
+			printRegistryTrustSummary(output, selected)
 
 			confirmChoice := ""
-			printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc goes back.")
+			printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
 
 			confirmPrompt := &survey.Select{
 				Message:  "Proceed with this registry service?",
@@ -631,18 +658,18 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 		}
 
 		if selected.Source == catalog.SourceRegistry {
-			fmt.Fprintln(cmd.OutOrStdout(), "Fetching latest details...")
+			fmt.Fprintln(output, "Fetching latest details...")
 			selected = refreshRegistryEntry(selected)
 		}
 
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {
-				fmt.Fprintln(cmd.OutOrStdout(), "This registry service has no supported install method (unsupported transport or package type).")
+				fmt.Fprintln(output, "This registry service has no supported install method (unsupported transport or package type).")
 				return service.Service{}, errRegistryOnly
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "This registry service has no supported install method. Choose a curated service.")
+			fmt.Fprintln(output, "This registry service has no supported install method. Choose a curated service.")
 			continue
 		}
 
@@ -740,6 +767,50 @@ func pickTargetsSurvey(cmd *cobra.Command) ([]targetpkg.Target, error) {
 		}
 
 		return selectedTargets, nil
+	}
+}
+
+func waitForRegistrySyncInSurvey(output io.Writer, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	lastStatusLine := ""
+	printedInline := false
+	maxLen := 0
+
+	for {
+		statusLine := registrySyncStatusLine(true)
+		if statusLine == "" {
+			if printedInline {
+				fmt.Fprintln(output)
+			}
+
+			return
+		}
+
+		if statusLine != lastStatusLine {
+			if len(statusLine) > maxLen {
+				maxLen = len(statusLine)
+			}
+
+			padding := ""
+			if extra := maxLen - len(statusLine); extra > 0 {
+				padding = strings.Repeat(" ", extra)
+			}
+
+			fmt.Fprintf(output, "\r%s%s", statusLine, padding)
+			printedInline = true
+			lastStatusLine = statusLine
+		}
+
+		if time.Now().After(deadline) {
+			if printedInline {
+				fmt.Fprintln(output)
+			}
+
+			fmt.Fprintln(output, "Registry sync is taking longer than expected; continuing with currently cached services.")
+			return
+		}
+
+		time.Sleep(350 * time.Millisecond)
 	}
 }
 

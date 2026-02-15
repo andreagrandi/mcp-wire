@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/andreagrandi/mcp-wire/internal/app"
@@ -27,7 +28,19 @@ Targets are the AI tools where services get installed.`,
 }
 
 func Execute() error {
+	if !isCacheCommand(os.Args) {
+		maybeStartRegistryBackgroundSync()
+	}
+
 	return rootCmd.Execute()
+}
+
+func isCacheCommand(args []string) bool {
+	if len(args) < 2 {
+		return false
+	}
+
+	return args[1] == "cache"
 }
 
 func runGuidedMainMenu(cmd *cobra.Command) error {

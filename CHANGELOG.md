@@ -3,6 +3,8 @@
 ## [Unreleased]
 
 ### Added
+- Registry cache now syncs in the background on CLI startup (when the registry feature is enabled), so registry flows can start from cached results and refresh incrementally without blocking command execution.
+- Added `mcp-wire cache clear` to remove the local registry cache file and recover quickly from stale/corrupt cache state.
 - Registry entries with package-based install methods (`npm`, `pypi`, `docker`/`oci`, `nuget`, `mcpb`) can now be installed end-to-end as stdio services, mapping registry package metadata into command + args configs.
 - Selecting a registry entry now fetches the latest version details from the `versions/latest` API endpoint, ensuring installs always use the most recent package version and metadata.
 - Explicit install path (`mcp-wire install <name>`) now falls back to the registry catalog when no curated service matches, enabling direct reinstall of registry entries from guided-mode equivalent commands.
@@ -22,6 +24,8 @@
 - Optional env vars with defaults are populated into resolved env so URL/header substitution can use them.
 
 ### Changed
+- Registry survey service picker UX was reworked to improve discoverability: it now uses a clearer filter prompt, keeps list focus behavior predictable, avoids noisy repeated hint lines, and handles initial empty-filter state more cleanly.
+- Registry sync progress in survey mode is now shown as a single inline-updating status line during initial sync waits instead of printing a new line per progress update.
 - Selecting a registry service in the install/uninstall wizard shows a rejection message and returns to source selection instead of looping indefinitely.
 - Catalog display in wizards and `list services` uses `*` curated markers instead of `[registry]` suffix tags when showing mixed sources.
 - Registry rejection message for entries with no supported install method now reads "no supported install method" instead of the package-specific message, since both remote and package paths are now attempted.

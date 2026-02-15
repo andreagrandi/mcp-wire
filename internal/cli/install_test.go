@@ -997,6 +997,11 @@ func overrideInstallCommandDependencies(t *testing.T) func() {
 	originalLoadRegistryCache := loadRegistryCache
 	originalFetchServerLatest := fetchServerLatest
 
+	configPath := t.TempDir() + "/config.json"
+	loadConfig = func() (*config.Config, error) {
+		return config.LoadFrom(configPath)
+	}
+
 	return func() {
 		loadServices = originalLoadServices
 		listInstalledTargets = originalListInstalledTargets

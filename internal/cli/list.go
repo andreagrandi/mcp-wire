@@ -63,6 +63,10 @@ func newListServicesCmd() *cobra.Command {
 				}
 
 				printCatalogEntries(cmd.OutOrStdout(), entries, source == "all")
+				if statusLine := registrySyncStatusLine(registryEnabled); statusLine != "" {
+					fmt.Fprintln(cmd.OutOrStdout())
+					fmt.Fprintln(cmd.OutOrStdout(), statusLine)
+				}
 				return nil
 			}
 

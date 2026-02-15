@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/service"
@@ -359,18 +360,29 @@ func pickServiceInteractive(output ioWriter, reader *bufio.Reader, services map[
 }
 
 func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source string) (service.Service, error) {
-	cat, err := loadCatalog(source, true)
-	if err != nil {
-		return service.Service{}, err
-	}
-
-	if cat.Count() == 0 {
-		return service.Service{}, errors.New("no service definitions available")
-	}
-
 	showMarkers := source == "all"
 
 	for {
+		cat, err := loadCatalog(source, true)
+		if err != nil {
+			return service.Service{}, err
+		}
+
+		if cat.Count() == 0 {
+			statusLine := registrySyncStatusLine(true)
+			if statusLine == "" {
+				return service.Service{}, errors.New("no service definitions available")
+			}
+
+			fmt.Fprintln(output, statusLine)
+			time.Sleep(750 * time.Millisecond)
+			continue
+		}
+
+		if statusLine := registrySyncStatusLine(true); statusLine != "" {
+			fmt.Fprintln(output, statusLine)
+		}
+
 		search, err := readTrimmedLine(reader, output, "Search (name/description, Enter=all): ")
 		if err != nil {
 			return service.Service{}, fmt.Errorf("read service search: %w", err)

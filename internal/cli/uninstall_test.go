@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/andreagrandi/mcp-wire/internal/config"
 	"github.com/andreagrandi/mcp-wire/internal/credential"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
@@ -399,6 +400,12 @@ func overrideUninstallCommandDependencies(t *testing.T) func() {
 	originalNewCredentialFileSourceForCleanup := newCredentialFileSourceForCleanup
 	originalIsTerminalReader := isTerminalReader
 	originalAllTargets := allTargets
+	originalLoadConfig := loadConfig
+
+	configPath := t.TempDir() + "/config.json"
+	loadConfig = func() (*config.Config, error) {
+		return config.LoadFrom(configPath)
+	}
 
 	return func() {
 		loadServices = originalLoadServices
@@ -407,5 +414,6 @@ func overrideUninstallCommandDependencies(t *testing.T) func() {
 		newCredentialFileSourceForCleanup = originalNewCredentialFileSourceForCleanup
 		isTerminalReader = originalIsTerminalReader
 		allTargets = originalAllTargets
+		loadConfig = originalLoadConfig
 	}
 }

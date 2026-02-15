@@ -659,6 +659,8 @@ Requirements:
 - Incremental sync using `updated_since`.
 - Local in-memory filtering/search for interactive pickers.
 - Graceful fallback to stale cache when network fails.
+- Background sync at CLI startup when registry is enabled, with non-blocking UX and visible sync status in registry flows.
+- Provide a cache reset command for local recovery (`mcp-wire cache clear`).
 
 Acceptance criteria:
 
@@ -707,7 +709,7 @@ If user selects "Both", show one merged searchable list with clear markers:
 
 Always print the legend near the list when markers are shown.
 
-### 7.7 — Trust/safety messaging for registry entries
+### 7.7 — Trust/safety messaging for registry entries ✅
 
 Before confirming installation of a registry entry, show a short summary:
 

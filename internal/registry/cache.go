@@ -16,6 +16,26 @@ const (
 	syncPageLimit = 100
 )
 
+// SyncMode identifies the type of cache sync currently in progress.
+type SyncMode string
+
+const (
+	SyncModeCold        SyncMode = "cold"
+	SyncModeIncremental SyncMode = "incremental"
+)
+
+// SyncProgress reports cache sync progress for UI/status updates.
+type SyncProgress struct {
+	Mode    SyncMode
+	Pages   int
+	Fetched int
+	Updated int
+	Cached  int
+}
+
+// SyncProgressCallback receives sync progress and a snapshot of cached servers.
+type SyncProgressCallback func(progress SyncProgress, snapshot []ServerResponse)
+
 // ServerLister abstracts the registry client for testability.
 type ServerLister interface {
 	ListServers(opts ListOptions) (*ServerListResponse, error)
@@ -32,6 +52,7 @@ type Cache struct {
 	path   string
 	client ServerLister
 	store  CacheStore
+	onSync SyncProgressCallback
 }
 
 // NewCache creates a cache backed by the default cache path.
@@ -45,6 +66,11 @@ func NewCacheWithPath(client ServerLister, path string) *Cache {
 		path:   path,
 		client: client,
 	}
+}
+
+// SetSyncProgressCallback registers a callback that receives sync progress updates.
+func (c *Cache) SetSyncProgressCallback(callback SyncProgressCallback) {
+	c.onSync = callback
 }
 
 // Load reads the cache from disk into memory.
@@ -126,6 +152,7 @@ func (c *Cache) Count() int {
 func (c *Cache) coldSync() error {
 	var all []ServerResponse
 	cursor := ""
+	pages := 0
 
 	for {
 		resp, err := c.client.ListServers(ListOptions{
@@ -137,6 +164,14 @@ func (c *Cache) coldSync() error {
 		}
 
 		all = append(all, resp.Servers...)
+		pages++
+		c.store.Servers = all
+		c.emitSyncProgress(SyncProgress{
+			Mode:    SyncModeCold,
+			Pages:   pages,
+			Fetched: len(all),
+			Cached:  len(c.store.Servers),
+		})
 
 		if resp.Metadata.NextCursor == "" {
 			break
@@ -147,6 +182,12 @@ func (c *Cache) coldSync() error {
 
 	c.store.Servers = all
 	c.store.LastSynced = time.Now().UTC()
+	c.emitSyncProgress(SyncProgress{
+		Mode:    SyncModeCold,
+		Pages:   pages,
+		Fetched: len(all),
+		Cached:  len(c.store.Servers),
+	})
 
 	return c.save()
 }
@@ -156,6 +197,8 @@ func (c *Cache) incrementalSync() error {
 	index := c.buildIndex()
 
 	cursor := ""
+	pages := 0
+	updatedCount := 0
 
 	for {
 		resp, err := c.client.ListServers(ListOptions{
@@ -174,7 +217,16 @@ func (c *Cache) incrementalSync() error {
 				c.store.Servers = append(c.store.Servers, updated)
 				index[updated.Server.Name] = len(c.store.Servers) - 1
 			}
+			updatedCount++
 		}
+
+		pages++
+		c.emitSyncProgress(SyncProgress{
+			Mode:    SyncModeIncremental,
+			Pages:   pages,
+			Updated: updatedCount,
+			Cached:  len(c.store.Servers),
+		})
 
 		if resp.Metadata.NextCursor == "" {
 			break
@@ -184,8 +236,25 @@ func (c *Cache) incrementalSync() error {
 	}
 
 	c.store.LastSynced = time.Now().UTC()
+	c.emitSyncProgress(SyncProgress{
+		Mode:    SyncModeIncremental,
+		Pages:   pages,
+		Updated: updatedCount,
+		Cached:  len(c.store.Servers),
+	})
 
 	return c.save()
+}
+
+func (c *Cache) emitSyncProgress(progress SyncProgress) {
+	if c.onSync == nil {
+		return
+	}
+
+	snapshot := make([]ServerResponse, len(c.store.Servers))
+	copy(snapshot, c.store.Servers)
+
+	c.onSync(progress, snapshot)
 }
 
 func (c *Cache) buildIndex() map[string]int {
@@ -213,6 +282,30 @@ func (c *Cache) save() error {
 	}
 
 	return nil
+}
+
+// DefaultCachePath returns the on-disk path of the registry cache file.
+func DefaultCachePath() string {
+	return defaultCachePath()
+}
+
+// ClearDefaultCache removes the on-disk registry cache file.
+// It returns the cache path and whether a file was removed.
+func ClearDefaultCache() (string, bool, error) {
+	path := defaultCachePath()
+
+	if err := os.Remove(path); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return path, false, nil
+		}
+
+		return path, false, fmt.Errorf("remove cache file %q: %w", path, err)
+	}
+
+	// Best-effort: remove directory if empty.
+	_ = os.Remove(filepath.Dir(path))
+
+	return path, true, nil
 }
 
 func defaultCachePath() string {
