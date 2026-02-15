@@ -37,6 +37,32 @@ func runInstallWizardWithScope(
 	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt, scope, scopeSet)
 }
 
+var errRegistryOnly = errors.New("registry only source")
+
+func pickSourceInteractive(output ioWriter, reader *bufio.Reader) (string, error) {
+	for {
+		fmt.Fprintln(output, "  1) Curated services (recommended)")
+		fmt.Fprintln(output, "  2) Registry services (community)")
+		fmt.Fprintln(output, "  3) Both")
+
+		selection, err := readTrimmedLine(reader, output, "Source [1-3, Enter=1]: ")
+		if err != nil {
+			return "", fmt.Errorf("read source selection: %w", err)
+		}
+
+		switch strings.ToLower(strings.TrimSpace(selection)) {
+		case "", "1":
+			return "curated", nil
+		case "2":
+			return "registry", nil
+		case "3":
+			return "all", nil
+		default:
+			fmt.Fprintln(output, "Invalid selection. Choose 1, 2, or 3.")
+		}
+	}
+}
+
 func runInstallWizardPlain(
 	cmd *cobra.Command,
 	reader *bufio.Reader,
@@ -48,7 +74,6 @@ func runInstallWizardPlain(
 	output := cmd.OutOrStdout()
 	fmt.Fprintln(output, "Install Wizard")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 1/4: Service")
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -62,9 +87,35 @@ func runInstallWizardPlain(
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceInteractive(output, reader, services, registryEnabled, "curated")
-	if err != nil {
-		return err
+	var svc service.Service
+	for {
+		source := "curated"
+		if registryEnabled {
+			fmt.Fprintln(output, "Source:")
+
+			var sourceErr error
+			source, sourceErr = pickSourceInteractive(output, reader)
+			if sourceErr != nil {
+				return sourceErr
+			}
+
+			fmt.Fprintln(output)
+		}
+
+		fmt.Fprintln(output, "Step 1/4: Service")
+
+		var serviceErr error
+		svc, serviceErr = pickServiceInteractive(output, reader, services, registryEnabled, source)
+		if errors.Is(serviceErr, errRegistryOnly) {
+			fmt.Fprintln(output)
+			continue
+		}
+
+		if serviceErr != nil {
+			return serviceErr
+		}
+
+		break
 	}
 
 	fmt.Fprintln(output)
@@ -132,7 +183,6 @@ func runUninstallWizardPlain(
 	output := cmd.OutOrStdout()
 	fmt.Fprintln(output, "Uninstall Wizard")
 	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 1/4: Service")
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -146,9 +196,35 @@ func runUninstallWizardPlain(
 		return fmt.Errorf("load services: %w", err)
 	}
 
-	svc, err := pickServiceInteractive(output, reader, services, registryEnabled, "curated")
-	if err != nil {
-		return err
+	var svc service.Service
+	for {
+		source := "curated"
+		if registryEnabled {
+			fmt.Fprintln(output, "Source:")
+
+			var sourceErr error
+			source, sourceErr = pickSourceInteractive(output, reader)
+			if sourceErr != nil {
+				return sourceErr
+			}
+
+			fmt.Fprintln(output)
+		}
+
+		fmt.Fprintln(output, "Step 1/4: Service")
+
+		var serviceErr error
+		svc, serviceErr = pickServiceInteractive(output, reader, services, registryEnabled, source)
+		if errors.Is(serviceErr, errRegistryOnly) {
+			fmt.Fprintln(output)
+			continue
+		}
+
+		if serviceErr != nil {
+			return serviceErr
+		}
+
+		break
 	}
 
 	fmt.Fprintln(output)
@@ -292,6 +368,8 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 		return service.Service{}, errors.New("no service definitions available")
 	}
 
+	showMarkers := source == "all"
+
 	for {
 		search, err := readTrimmedLine(reader, output, "Search (name/description, Enter=all): ")
 		if err != nil {
@@ -304,6 +382,10 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 			continue
 		}
 
+		if showMarkers {
+			fmt.Fprintln(output, "(* = curated by mcp-wire)")
+		}
+
 		fmt.Fprintln(output, "Matches:")
 		for i, entry := range matches {
 			display := strings.TrimSpace(entry.Description())
@@ -311,12 +393,14 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 				display = entry.Name
 			}
 
-			tag := ""
-			if entry.Source == catalog.SourceRegistry {
-				tag = " [registry]"
+			prefix := ""
+			if showMarkers && entry.Source == catalog.SourceCurated {
+				prefix = "* "
+			} else if showMarkers {
+				prefix = "  "
 			}
 
-			fmt.Fprintf(output, "  %d) %s%s (%s)\n", i+1, entry.Name, tag, display)
+			fmt.Fprintf(output, "  %d) %s%s (%s)\n", i+1, prefix, entry.Name, display)
 		}
 
 		selection, err := readTrimmedLine(reader, output, "Service number: ")
@@ -333,6 +417,11 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 		selected := matches[index-1]
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
+			if source == "registry" {
+				fmt.Fprintln(output, "Registry services cannot be installed yet.")
+				return service.Service{}, errRegistryOnly
+			}
+
 			fmt.Fprintln(output, "Registry services cannot be installed yet. Choose a curated service.")
 			continue
 		}

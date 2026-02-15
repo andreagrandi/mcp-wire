@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+- Install and uninstall wizards now include a source selection step (Curated, Registry, Both) when the registry feature is enabled, in both plain and survey UIs.
+- `list services --source all` now marks curated entries with a `*` prefix and prints a legend line; single-source views show no markers.
+- `--source` flag on `list services` is now visible in help output when the registry feature is enabled, and hidden otherwise.
+
+### Changed
+- Selecting a registry service in the install/uninstall wizard shows a rejection message and returns to source selection instead of looping indefinitely.
+- Catalog display in wizards and `list services` uses `*` curated markers instead of `[registry]` suffix tags when showing mixed sources.
+
 ## v0.1.3 - 2026-02-14
 
 ### Changed

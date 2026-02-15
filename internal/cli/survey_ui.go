@@ -100,6 +100,37 @@ func runGuidedMainMenuSurvey(cmd *cobra.Command) error {
 	}
 }
 
+func pickSourceSurvey(cmd *cobra.Command) (string, error) {
+	sourceOptions := []string{
+		"Curated services (recommended)",
+		"Registry services (community)",
+		"Both",
+	}
+
+	selectedLabel := ""
+	printSurveyHint(cmd.OutOrStdout(), "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+	prompt := &survey.Select{
+		Message:  "Source",
+		Options:  sourceOptions,
+		Default:  sourceOptions[0],
+		PageSize: 3,
+	}
+
+	if err := askSurveyPrompt(cmd, prompt, &selectedLabel); err != nil {
+		return "", err
+	}
+
+	switch selectedLabel {
+	case sourceOptions[1]:
+		return "registry", nil
+	case sourceOptions[2]:
+		return "all", nil
+	default:
+		return "curated", nil
+	}
+}
+
 func runInstallWizardSurvey(
 	cmd *cobra.Command,
 	targetSlugs []string,
@@ -124,71 +155,63 @@ func runInstallWizardSurvey(
 		return fmt.Errorf("load services: %w", err)
 	}
 
-serviceStep:
+sourceStep:
 	for {
-		fmt.Fprintln(output, "Step 1/4: Service")
+		source := "curated"
+		if registryEnabled {
+			var sourceErr error
+			source, sourceErr = pickSourceSurvey(cmd)
+			if sourceErr != nil {
+				if errors.Is(sourceErr, errWizardBack) {
+					fmt.Fprintln(output, "Install cancelled.")
+					return nil
+				}
 
-		svc, err := pickServiceSurvey(cmd, services, registryEnabled, "curated")
-		if err != nil {
-			if errors.Is(err, errWizardBack) {
-				fmt.Fprintln(output, "Install cancelled.")
-				return nil
+				return sourceErr
 			}
 
-			return err
+			fmt.Fprintln(output)
 		}
 
-	targetStep:
+	serviceStep:
 		for {
-			fmt.Fprintln(output)
-			fmt.Fprintln(output, "Step 2/4: Targets")
+			fmt.Fprintln(output, "Step 1/4: Service")
 
-			targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+			svc, err := pickServiceSurvey(cmd, services, registryEnabled, source)
 			if err != nil {
+				if errors.Is(err, errRegistryOnly) {
+					fmt.Fprintln(output)
+					continue sourceStep
+				}
+
 				if errors.Is(err, errWizardBack) {
-					continue serviceStep
+					if registryEnabled {
+						continue sourceStep
+					}
+
+					fmt.Fprintln(output, "Install cancelled.")
+					return nil
 				}
 
 				return err
 			}
 
-			selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Install")
-			if err != nil {
-				if errors.Is(err, errWizardBack) {
-					if len(targetSlugs) > 0 {
+		targetStep:
+			for {
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 2/4: Targets")
+
+				targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+				if err != nil {
+					if errors.Is(err, errWizardBack) {
 						continue serviceStep
 					}
 
-					continue targetStep
+					return err
 				}
 
-				return err
-			}
-
-			for {
-				fmt.Fprintln(output)
-				fmt.Fprintln(output, "Step 3/4: Review")
-				fmt.Fprintf(output, "Service: %s\n", svc.Name)
-				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
-				if anyTargetSupportsProjectScope(targetDefinitions) {
-					fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
-				}
-				credentialMode := "prompt as needed"
-				if noPrompt {
-					credentialMode = "existing values only"
-				}
-				fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
-
-				confirmChoice := ""
-				printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
-
-				confirmPrompt := &survey.Select{
-					Message:  "Apply changes?",
-					Options:  []string{"Yes", "No"},
-					Default:  "Yes",
-					PageSize: 2,
-				}
-				if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+				selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Install")
+				if err != nil {
 					if errors.Is(err, errWizardBack) {
 						if len(targetSlugs) > 0 {
 							continue serviceStep
@@ -197,23 +220,59 @@ serviceStep:
 						continue targetStep
 					}
 
-					return fmt.Errorf("read install confirmation: %w", err)
-				}
-
-				if confirmChoice != "Yes" {
-					fmt.Fprintln(output, "Install cancelled.")
-					return nil
-				}
-
-				fmt.Fprintln(output)
-				fmt.Fprintln(output, "Step 4/4: Apply")
-
-				if err := executeInstall(cmd, svc, targetDefinitions, noPrompt, selectedScope); err != nil {
 					return err
 				}
 
-				printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions, selectedScope))
-				return nil
+				for {
+					fmt.Fprintln(output)
+					fmt.Fprintln(output, "Step 3/4: Review")
+					fmt.Fprintf(output, "Service: %s\n", svc.Name)
+					fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+					if anyTargetSupportsProjectScope(targetDefinitions) {
+						fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
+					}
+					credentialMode := "prompt as needed"
+					if noPrompt {
+						credentialMode = "existing values only"
+					}
+					fmt.Fprintf(output, "Credentials: %s\n", credentialMode)
+
+					confirmChoice := ""
+					printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+					confirmPrompt := &survey.Select{
+						Message:  "Apply changes?",
+						Options:  []string{"Yes", "No"},
+						Default:  "Yes",
+						PageSize: 2,
+					}
+					if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+						if errors.Is(err, errWizardBack) {
+							if len(targetSlugs) > 0 {
+								continue serviceStep
+							}
+
+							continue targetStep
+						}
+
+						return fmt.Errorf("read install confirmation: %w", err)
+					}
+
+					if confirmChoice != "Yes" {
+						fmt.Fprintln(output, "Install cancelled.")
+						return nil
+					}
+
+					fmt.Fprintln(output)
+					fmt.Fprintln(output, "Step 4/4: Apply")
+
+					if err := executeInstall(cmd, svc, targetDefinitions, noPrompt, selectedScope); err != nil {
+						return err
+					}
+
+					printEquivalentCommand(output, buildEquivalentInstallCommand(svc.Name, targetDefinitions, selectedScope))
+					return nil
+				}
 			}
 		}
 	}
@@ -242,66 +301,63 @@ func runUninstallWizardSurvey(
 		return fmt.Errorf("load services: %w", err)
 	}
 
-serviceStep:
+sourceStep:
 	for {
-		fmt.Fprintln(output, "Step 1/4: Service")
+		source := "curated"
+		if registryEnabled {
+			var sourceErr error
+			source, sourceErr = pickSourceSurvey(cmd)
+			if sourceErr != nil {
+				if errors.Is(sourceErr, errWizardBack) {
+					fmt.Fprintln(output, "Uninstall cancelled.")
+					return nil
+				}
 
-		svc, err := pickServiceSurvey(cmd, services, registryEnabled, "curated")
-		if err != nil {
-			if errors.Is(err, errWizardBack) {
-				fmt.Fprintln(output, "Uninstall cancelled.")
-				return nil
+				return sourceErr
 			}
 
-			return err
+			fmt.Fprintln(output)
 		}
 
-	targetStep:
+	serviceStep:
 		for {
-			fmt.Fprintln(output)
-			fmt.Fprintln(output, "Step 2/4: Targets")
+			fmt.Fprintln(output, "Step 1/4: Service")
 
-			targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+			svc, err := pickServiceSurvey(cmd, services, registryEnabled, source)
 			if err != nil {
+				if errors.Is(err, errRegistryOnly) {
+					fmt.Fprintln(output)
+					continue sourceStep
+				}
+
 				if errors.Is(err, errWizardBack) {
-					continue serviceStep
+					if registryEnabled {
+						continue sourceStep
+					}
+
+					fmt.Fprintln(output, "Uninstall cancelled.")
+					return nil
 				}
 
 				return err
 			}
 
-			selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Uninstall")
-			if err != nil {
-				if errors.Is(err, errWizardBack) {
-					if len(targetSlugs) > 0 {
+		targetStep:
+			for {
+				fmt.Fprintln(output)
+				fmt.Fprintln(output, "Step 2/4: Targets")
+
+				targetDefinitions, err := resolveTargetsForSurveyWizard(cmd, targetSlugs)
+				if err != nil {
+					if errors.Is(err, errWizardBack) {
 						continue serviceStep
 					}
 
-					continue targetStep
+					return err
 				}
 
-				return err
-			}
-
-			for {
-				fmt.Fprintln(output)
-				fmt.Fprintln(output, "Step 3/4: Review")
-				fmt.Fprintf(output, "Service: %s\n", svc.Name)
-				fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
-				if anyTargetSupportsProjectScope(targetDefinitions) {
-					fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
-				}
-
-				confirmChoice := ""
-				printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
-
-				confirmPrompt := &survey.Select{
-					Message:  "Apply changes?",
-					Options:  []string{"Yes", "No"},
-					Default:  "Yes",
-					PageSize: 2,
-				}
-				if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+				selectedScope, err := resolveScopeForSurveyWizard(cmd, targetDefinitions, requestedScope, scopeSet, "Uninstall")
+				if err != nil {
 					if errors.Is(err, errWizardBack) {
 						if len(targetSlugs) > 0 {
 							continue serviceStep
@@ -310,48 +366,79 @@ serviceStep:
 						continue targetStep
 					}
 
-					return fmt.Errorf("read uninstall confirmation: %w", err)
-				}
-
-				if confirmChoice != "Yes" {
-					fmt.Fprintln(output, "Uninstall cancelled.")
-					return nil
-				}
-
-				fmt.Fprintln(output)
-				fmt.Fprintln(output, "Step 4/4: Apply")
-
-				printUninstallPlan(output, targetDefinitions)
-
-				uninstallErrors := make([]error, 0)
-				for _, targetDefinition := range targetDefinitions {
-					var err error
-					scopedTarget, supportsScopes := targetDefinition.(targetpkg.ScopedTarget)
-					if supportsScopes && targetSupportsScope(targetDefinition, selectedScope) {
-						err = scopedTarget.UninstallWithScope(svc.Name, selectedScope)
-					} else {
-						err = targetDefinition.Uninstall(svc.Name)
-					}
-
-					if err != nil {
-						fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
-						uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
-						continue
-					}
-
-					fmt.Fprintf(output, "  %s: removed\n", targetDefinition.Name())
-				}
-
-				if len(uninstallErrors) > 0 {
-					return fmt.Errorf("failed to uninstall service %q from one or more targets: %w", svc.Name, errors.Join(uninstallErrors...))
-				}
-
-				if err := maybeRemoveStoredCredentials(cmd, svc.Name); err != nil {
 					return err
 				}
 
-				printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions, selectedScope))
-				return nil
+				for {
+					fmt.Fprintln(output)
+					fmt.Fprintln(output, "Step 3/4: Review")
+					fmt.Fprintf(output, "Service: %s\n", svc.Name)
+					fmt.Fprintf(output, "Targets: %s\n", targetDisplayNames(targetDefinitions))
+					if anyTargetSupportsProjectScope(targetDefinitions) {
+						fmt.Fprintf(output, "Scope (supported targets): %s\n", scopeDescription(selectedScope))
+					}
+
+					confirmChoice := ""
+					printSurveyHint(output, "Use Up/Down arrows, Enter to select. Esc goes back.")
+
+					confirmPrompt := &survey.Select{
+						Message:  "Apply changes?",
+						Options:  []string{"Yes", "No"},
+						Default:  "Yes",
+						PageSize: 2,
+					}
+					if err := askSurveyPrompt(cmd, confirmPrompt, &confirmChoice); err != nil {
+						if errors.Is(err, errWizardBack) {
+							if len(targetSlugs) > 0 {
+								continue serviceStep
+							}
+
+							continue targetStep
+						}
+
+						return fmt.Errorf("read uninstall confirmation: %w", err)
+					}
+
+					if confirmChoice != "Yes" {
+						fmt.Fprintln(output, "Uninstall cancelled.")
+						return nil
+					}
+
+					fmt.Fprintln(output)
+					fmt.Fprintln(output, "Step 4/4: Apply")
+
+					printUninstallPlan(output, targetDefinitions)
+
+					uninstallErrors := make([]error, 0)
+					for _, targetDefinition := range targetDefinitions {
+						var err error
+						scopedTarget, supportsScopes := targetDefinition.(targetpkg.ScopedTarget)
+						if supportsScopes && targetSupportsScope(targetDefinition, selectedScope) {
+							err = scopedTarget.UninstallWithScope(svc.Name, selectedScope)
+						} else {
+							err = targetDefinition.Uninstall(svc.Name)
+						}
+
+						if err != nil {
+							fmt.Fprintf(output, "  %s: failed (%v)\n", targetDefinition.Name(), err)
+							uninstallErrors = append(uninstallErrors, fmt.Errorf("target %q: %w", targetDefinition.Slug(), err))
+							continue
+						}
+
+						fmt.Fprintf(output, "  %s: removed\n", targetDefinition.Name())
+					}
+
+					if len(uninstallErrors) > 0 {
+						return fmt.Errorf("failed to uninstall service %q from one or more targets: %w", svc.Name, errors.Join(uninstallErrors...))
+					}
+
+					if err := maybeRemoveStoredCredentials(cmd, svc.Name); err != nil {
+						return err
+					}
+
+					printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions, selectedScope))
+					return nil
+				}
 			}
 		}
 	}
@@ -463,6 +550,8 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 		return service.Service{}, errors.New("no service definitions available")
 	}
 
+	showMarkers := source == "all"
+
 	for {
 		labels := make([]string, 0, len(entries))
 		entryByLabel := make(map[string]catalog.Entry, len(entries))
@@ -473,14 +562,20 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 				description = entry.Name
 			}
 
-			tag := ""
-			if entry.Source == catalog.SourceRegistry {
-				tag = " [registry]"
+			prefix := ""
+			if showMarkers && entry.Source == catalog.SourceCurated {
+				prefix = "* "
+			} else if showMarkers {
+				prefix = "  "
 			}
 
-			label := fmt.Sprintf("%s%s - %s", entry.Name, tag, description)
+			label := fmt.Sprintf("%s%s - %s", prefix, entry.Name, description)
 			labels = append(labels, label)
 			entryByLabel[label] = entry
+		}
+
+		if showMarkers {
+			fmt.Fprintln(cmd.OutOrStdout(), "(* = curated by mcp-wire)")
 		}
 
 		selectedLabel := ""
@@ -511,6 +606,11 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
+			if source == "registry" {
+				fmt.Fprintln(cmd.OutOrStdout(), "Registry services cannot be installed yet.")
+				return service.Service{}, errRegistryOnly
+			}
+
 			fmt.Fprintln(cmd.OutOrStdout(), "Registry services cannot be installed yet. Choose a curated service.")
 			continue
 		}

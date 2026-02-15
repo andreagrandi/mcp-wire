@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -53,6 +54,97 @@ func TestParseTargetSelectionRejectsNotInstalledTarget(t *testing.T) {
 	_, err := parseTargetSelection("2", targets)
 	if err == nil {
 		t.Fatal("expected selection of non-installed target to fail")
+	}
+}
+
+func TestPickSourceInteractiveSelectsCurated(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("1\n"))
+	var output bytes.Buffer
+
+	source, err := pickSourceInteractive(&output, reader)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if source != "curated" {
+		t.Fatalf("expected curated, got %q", source)
+	}
+}
+
+func TestPickSourceInteractiveSelectsRegistry(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("2\n"))
+	var output bytes.Buffer
+
+	source, err := pickSourceInteractive(&output, reader)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if source != "registry" {
+		t.Fatalf("expected registry, got %q", source)
+	}
+}
+
+func TestPickSourceInteractiveSelectsBoth(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("3\n"))
+	var output bytes.Buffer
+
+	source, err := pickSourceInteractive(&output, reader)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if source != "all" {
+		t.Fatalf("expected all, got %q", source)
+	}
+}
+
+func TestPickSourceInteractiveDefaultsCurated(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("\n"))
+	var output bytes.Buffer
+
+	source, err := pickSourceInteractive(&output, reader)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if source != "curated" {
+		t.Fatalf("expected curated as default, got %q", source)
+	}
+}
+
+func TestPickSourceInteractiveRejectsInvalid(t *testing.T) {
+	reader := bufio.NewReader(strings.NewReader("x\n1\n"))
+	var output bytes.Buffer
+
+	source, err := pickSourceInteractive(&output, reader)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if source != "curated" {
+		t.Fatalf("expected curated after retry, got %q", source)
+	}
+
+	if !strings.Contains(output.String(), "Invalid selection") {
+		t.Fatalf("expected invalid selection message, got %q", output.String())
+	}
+}
+
+func TestPickServiceInteractiveCatalogRegistryOnlyReturnsError(t *testing.T) {
+	stubLoadServicesForCatalog(t)
+	stubLoadRegistryCache(t, fakeRegistryServers())
+
+	reader := bufio.NewReader(strings.NewReader("\n1\n"))
+	var output bytes.Buffer
+
+	_, err := pickServiceInteractiveCatalog(&output, reader, "registry")
+	if !errors.Is(err, errRegistryOnly) {
+		t.Fatalf("expected errRegistryOnly, got %v", err)
+	}
+
+	if !strings.Contains(output.String(), "Registry services cannot be installed yet") {
+		t.Fatalf("expected rejection message, got %q", output.String())
 	}
 }
 

@@ -254,12 +254,20 @@ func TestListServicesSourceAllWithRegistryEnabled(t *testing.T) {
 		t.Fatalf("expected command to succeed: %v", err)
 	}
 
-	if !strings.Contains(output, "alpha") {
-		t.Fatalf("expected curated service in output, got %q", output)
+	if !strings.Contains(output, "* alpha") {
+		t.Fatalf("expected curated service with * marker, got %q", output)
 	}
 
-	if !strings.Contains(output, "beta [registry]") {
-		t.Fatalf("expected registry service with tag in output, got %q", output)
+	if !strings.Contains(output, "(* = curated by mcp-wire)") {
+		t.Fatalf("expected legend line in output, got %q", output)
+	}
+
+	if strings.Contains(output, "* beta") {
+		t.Fatalf("expected registry service without * marker, got %q", output)
+	}
+
+	if !strings.Contains(output, "beta") {
+		t.Fatalf("expected registry service in output, got %q", output)
 	}
 }
 

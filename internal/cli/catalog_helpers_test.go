@@ -156,7 +156,7 @@ func TestPrintCatalogEntriesFormatsOutput(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	printCatalogEntries(&buf, entries)
+	printCatalogEntries(&buf, entries, false)
 
 	output := buf.String()
 
@@ -168,8 +168,12 @@ func TestPrintCatalogEntriesFormatsOutput(t *testing.T) {
 		t.Fatalf("expected alpha in output, got %q", output)
 	}
 
-	if !strings.Contains(output, "beta [registry]") {
-		t.Fatalf("expected beta [registry] tag in output, got %q", output)
+	if !strings.Contains(output, "beta") {
+		t.Fatalf("expected beta in output, got %q", output)
+	}
+
+	if strings.Contains(output, "* ") {
+		t.Fatalf("expected no markers when showMarkers=false, got %q", output)
 	}
 
 	if !strings.Contains(output, "Alpha desc") {
@@ -183,7 +187,7 @@ func TestPrintCatalogEntriesFormatsOutput(t *testing.T) {
 
 func TestPrintCatalogEntriesEmptyList(t *testing.T) {
 	var buf bytes.Buffer
-	printCatalogEntries(&buf, nil)
+	printCatalogEntries(&buf, nil, false)
 
 	output := buf.String()
 	if !strings.Contains(output, "(none)") {
@@ -198,7 +202,7 @@ func TestPrintCatalogEntriesSortsByName(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	printCatalogEntries(&buf, entries)
+	printCatalogEntries(&buf, entries, false)
 
 	output := buf.String()
 	alphaIdx := strings.Index(output, "alpha")
@@ -206,6 +210,58 @@ func TestPrintCatalogEntriesSortsByName(t *testing.T) {
 
 	if alphaIdx > zetaIdx {
 		t.Fatalf("expected entries sorted alphabetically, got %q", output)
+	}
+}
+
+func TestPrintCatalogEntriesWithMarkers(t *testing.T) {
+	entries := []catalog.Entry{
+		{Source: catalog.SourceCurated, Name: "alpha", Curated: &service.Service{Name: "alpha", Description: "Alpha desc"}},
+		{Source: catalog.SourceRegistry, Name: "beta", Registry: &registry.ServerResponse{Server: registry.ServerJSON{Name: "beta", Description: "Beta desc"}}},
+	}
+
+	var buf bytes.Buffer
+	printCatalogEntries(&buf, entries, true)
+
+	output := buf.String()
+
+	if !strings.Contains(output, "(* = curated by mcp-wire)") {
+		t.Fatalf("expected legend line in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "* alpha") {
+		t.Fatalf("expected curated entry with * prefix, got %q", output)
+	}
+
+	if strings.Contains(output, "* beta") {
+		t.Fatalf("expected registry entry without * prefix, got %q", output)
+	}
+
+	if !strings.Contains(output, "  beta") {
+		t.Fatalf("expected registry entry with space prefix, got %q", output)
+	}
+}
+
+func TestPrintCatalogEntriesMarkersOnlyCurated(t *testing.T) {
+	entries := []catalog.Entry{
+		{Source: catalog.SourceCurated, Name: "alpha", Curated: &service.Service{Name: "alpha", Description: "Alpha desc"}},
+		{Source: catalog.SourceCurated, Name: "beta", Curated: &service.Service{Name: "beta", Description: "Beta desc"}},
+	}
+
+	var buf bytes.Buffer
+	printCatalogEntries(&buf, entries, true)
+
+	output := buf.String()
+
+	if !strings.Contains(output, "(* = curated by mcp-wire)") {
+		t.Fatalf("expected legend line in output, got %q", output)
+	}
+
+	if !strings.Contains(output, "* alpha") {
+		t.Fatalf("expected alpha with * prefix, got %q", output)
+	}
+
+	if !strings.Contains(output, "* beta") {
+		t.Fatalf("expected beta with * prefix, got %q", output)
 	}
 }
 

@@ -43,8 +43,13 @@ func loadCatalog(source string, registryEnabled bool) (*catalog.Catalog, error) 
 	return catalog.Merge(curatedEntries, registryEntries), nil
 }
 
-func printCatalogEntries(output io.Writer, entries []catalog.Entry) {
+func printCatalogEntries(output io.Writer, entries []catalog.Entry, showMarkers bool) {
 	fmt.Fprintln(output, "Available services:")
+
+	if showMarkers {
+		fmt.Fprintln(output, "  (* = curated by mcp-wire)")
+	}
+
 	fmt.Fprintln(output)
 
 	if len(entries) == 0 {
@@ -61,8 +66,8 @@ func printCatalogEntries(output io.Writer, entries []catalog.Entry) {
 	maxNameWidth := 0
 	for _, e := range sorted {
 		label := e.Name
-		if e.Source == catalog.SourceRegistry {
-			label += " [registry]"
+		if showMarkers {
+			label = "  " + label
 		}
 
 		if len(label) > maxNameWidth {
@@ -71,10 +76,14 @@ func printCatalogEntries(output io.Writer, entries []catalog.Entry) {
 	}
 
 	for _, e := range sorted {
-		label := e.Name
-		if e.Source == catalog.SourceRegistry {
-			label += " [registry]"
+		prefix := ""
+		if showMarkers && e.Source == catalog.SourceCurated {
+			prefix = "* "
+		} else if showMarkers {
+			prefix = "  "
 		}
+
+		label := prefix + e.Name
 
 		description := strings.TrimSpace(e.Description())
 		if description == "" {
@@ -83,6 +92,17 @@ func printCatalogEntries(output io.Writer, entries []catalog.Entry) {
 		}
 
 		fmt.Fprintf(output, "  %-*s  %s\n", maxNameWidth, label, description)
+	}
+}
+
+func sourceLabel(source string) string {
+	switch source {
+	case "curated":
+		return "curated"
+	case "registry":
+		return "registry"
+	default:
+		return "all"
 	}
 }
 

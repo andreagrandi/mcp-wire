@@ -62,7 +62,7 @@ func newListServicesCmd() *cobra.Command {
 					entries = cat.All()
 				}
 
-				printCatalogEntries(cmd.OutOrStdout(), entries)
+				printCatalogEntries(cmd.OutOrStdout(), entries, source == "all")
 				return nil
 			}
 
@@ -78,6 +78,16 @@ func newListServicesCmd() *cobra.Command {
 
 	cmd.Flags().String("source", "curated", "filter by source: curated, registry, or all")
 	cmd.Flag("source").Hidden = true
+
+	parentHelp := cmd.HelpFunc()
+	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
+		cfg, err := loadConfig()
+		if err == nil && cfg.IsFeatureEnabled("registry") {
+			c.Flag("source").Hidden = false
+		}
+
+		parentHelp(c, args)
+	})
 
 	return cmd
 }
