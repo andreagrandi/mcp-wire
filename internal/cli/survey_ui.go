@@ -633,11 +633,11 @@ func pickServiceSurveyCatalog(cmd *cobra.Command, source string) (service.Servic
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {
-				fmt.Fprintln(cmd.OutOrStdout(), "Registry services cannot be installed yet.")
+				fmt.Fprintln(cmd.OutOrStdout(), "This registry service has no supported remote transport. Package-based install is not yet supported.")
 				return service.Service{}, errRegistryOnly
 			}
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Registry services cannot be installed yet. Choose a curated service.")
+			fmt.Fprintln(cmd.OutOrStdout(), "This registry service has no supported remote transport. Package-based install is not yet supported. Choose a curated service.")
 			continue
 		}
 

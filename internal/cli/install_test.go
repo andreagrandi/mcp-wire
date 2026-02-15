@@ -802,6 +802,77 @@ func TestInstallCommandSkipsOAuthAuthenticationForNonOAuthService(t *testing.T) 
 	}
 }
 
+func TestApplyRegistrySubstitutionsURL(t *testing.T) {
+	svc := service.Service{
+		URL:     "https://{tenant}.example.com/mcp",
+		Headers: map[string]string{},
+	}
+
+	resolvedEnv := map[string]string{
+		"tenant":    "acme",
+		"API_TOKEN": "secret",
+	}
+
+	applyRegistrySubstitutions(&svc, resolvedEnv)
+
+	if svc.URL != "https://acme.example.com/mcp" {
+		t.Fatalf("expected URL substitution, got %q", svc.URL)
+	}
+}
+
+func TestApplyRegistrySubstitutionsHeaders(t *testing.T) {
+	svc := service.Service{
+		URL: "https://example.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer {api_key}",
+			"X-Custom":      "static-value",
+		},
+	}
+
+	resolvedEnv := map[string]string{
+		"api_key": "my-secret-key",
+	}
+
+	applyRegistrySubstitutions(&svc, resolvedEnv)
+
+	if svc.Headers["Authorization"] != "Bearer my-secret-key" {
+		t.Fatalf("expected header substitution, got %q", svc.Headers["Authorization"])
+	}
+
+	if svc.Headers["X-Custom"] != "static-value" {
+		t.Fatalf("expected static header preserved, got %q", svc.Headers["X-Custom"])
+	}
+}
+
+func TestApplyRegistrySubstitutionsPreservesResolvedEnv(t *testing.T) {
+	svc := service.Service{
+		URL: "https://{tenant}.example.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer {token}",
+		},
+	}
+
+	resolvedEnv := map[string]string{
+		"tenant": "acme",
+		"token":  "secret",
+		"EXTRA":  "keep-me",
+	}
+
+	applyRegistrySubstitutions(&svc, resolvedEnv)
+
+	if len(resolvedEnv) != 3 {
+		t.Fatalf("expected all 3 env vars preserved, got %d: %v", len(resolvedEnv), resolvedEnv)
+	}
+
+	if resolvedEnv["tenant"] != "acme" {
+		t.Fatalf("expected tenant preserved, got %v", resolvedEnv)
+	}
+
+	if resolvedEnv["token"] != "secret" {
+		t.Fatalf("expected token preserved, got %v", resolvedEnv)
+	}
+}
+
 func overrideInstallCommandDependencies(t *testing.T) func() {
 	t.Helper()
 

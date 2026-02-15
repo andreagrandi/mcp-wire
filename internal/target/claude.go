@@ -564,6 +564,10 @@ func buildClaudeCodeServerConfig(svc service.Service, resolvedEnv map[string]str
 		}
 
 		serverConfig["url"] = url
+
+		if len(svc.Headers) > 0 {
+			serverConfig["headers"] = svc.Headers
+		}
 	case "sse":
 		url := strings.TrimSpace(svc.URL)
 		if url == "" {
@@ -571,6 +575,10 @@ func buildClaudeCodeServerConfig(svc service.Service, resolvedEnv map[string]str
 		}
 
 		serverConfig["url"] = url
+
+		if len(svc.Headers) > 0 {
+			serverConfig["headers"] = svc.Headers
+		}
 	case "stdio":
 		command := strings.TrimSpace(svc.Command)
 		if command == "" {

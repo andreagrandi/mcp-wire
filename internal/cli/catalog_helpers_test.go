@@ -283,7 +283,7 @@ func TestCatalogEntryToServiceCurated(t *testing.T) {
 	}
 }
 
-func TestCatalogEntryToServiceRegistry(t *testing.T) {
+func TestCatalogEntryToServiceRegistryNoRemotes(t *testing.T) {
 	entry := catalog.Entry{
 		Source: catalog.SourceRegistry,
 		Name:   "test",
@@ -294,7 +294,36 @@ func TestCatalogEntryToServiceRegistry(t *testing.T) {
 
 	_, ok := catalogEntryToService(entry)
 	if ok {
-		t.Fatal("expected registry entry to return false")
+		t.Fatal("expected registry entry without remotes to return false")
+	}
+}
+
+func TestCatalogEntryToServiceRegistryRemote(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "test",
+				Description: "Test server",
+				Remotes: []registry.Transport{
+					{Type: "streamable-http", URL: "https://example.com/mcp"},
+				},
+			},
+		},
+	}
+
+	svc, ok := catalogEntryToService(entry)
+	if !ok {
+		t.Fatal("expected registry entry with remote to convert successfully")
+	}
+
+	if svc.Name != "test" {
+		t.Fatalf("expected service name %q, got %q", "test", svc.Name)
+	}
+
+	if svc.Transport != "http" {
+		t.Fatalf("expected transport %q, got %q", "http", svc.Transport)
 	}
 }
 
@@ -593,5 +622,283 @@ func TestPrintRegistryTrustSummaryPackageInstallType(t *testing.T) {
 	}
 	if !strings.Contains(output, "Transport: stdio") {
 		t.Fatalf("expected stdio transport, got %q", output)
+	}
+}
+
+func TestRegistryRemoteToServiceStreamableHTTP(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "test-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "test-server",
+				Description: "A test server",
+				Remotes: []registry.Transport{
+					{Type: "streamable-http", URL: "https://example.com/mcp"},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected streamable-http remote to convert successfully")
+	}
+
+	if svc.Transport != "http" {
+		t.Fatalf("expected transport %q, got %q", "http", svc.Transport)
+	}
+
+	if svc.URL != "https://example.com/mcp" {
+		t.Fatalf("expected URL %q, got %q", "https://example.com/mcp", svc.URL)
+	}
+
+	if svc.Name != "test-server" {
+		t.Fatalf("expected name %q, got %q", "test-server", svc.Name)
+	}
+}
+
+func TestRegistryRemoteToServiceSSE(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "sse-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "sse-server",
+				Description: "An SSE server",
+				Remotes: []registry.Transport{
+					{Type: "sse", URL: "https://example.com/sse"},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected sse remote to convert successfully")
+	}
+
+	if svc.Transport != "sse" {
+		t.Fatalf("expected transport %q, got %q", "sse", svc.Transport)
+	}
+
+	if svc.URL != "https://example.com/sse" {
+		t.Fatalf("expected URL %q, got %q", "https://example.com/sse", svc.URL)
+	}
+}
+
+func TestRegistryRemoteToServiceNoRemotes(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "pkg-only",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "pkg-only",
+				Packages: []registry.Package{
+					{RegistryType: "npm", Identifier: "@example/server", Transport: registry.Transport{Type: "stdio"}},
+				},
+			},
+		},
+	}
+
+	_, ok := registryRemoteToService(entry)
+	if ok {
+		t.Fatal("expected package-only entry to return false")
+	}
+}
+
+func TestRegistryRemoteToServiceUnsupportedTransport(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "grpc-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "grpc-server",
+				Remotes: []registry.Transport{
+					{Type: "grpc", URL: "grpc://example.com:9090"},
+				},
+			},
+		},
+	}
+
+	_, ok := registryRemoteToService(entry)
+	if ok {
+		t.Fatal("expected unsupported transport to return false")
+	}
+}
+
+func TestRegistryRemoteToServiceURLVariables(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "tenant-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "tenant-server",
+				Remotes: []registry.Transport{
+					{
+						Type: "streamable-http",
+						URL:  "https://{tenant}.example.com/mcp",
+						Variables: map[string]registry.InputField{
+							"tenant": {Description: "Your tenant ID", IsRequired: true, Default: "default-tenant"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected entry with URL variables to convert successfully")
+	}
+
+	if len(svc.Env) != 1 {
+		t.Fatalf("expected 1 env var, got %d", len(svc.Env))
+	}
+
+	if svc.Env[0].Name != "tenant" {
+		t.Fatalf("expected env var name %q, got %q", "tenant", svc.Env[0].Name)
+	}
+
+	if svc.Env[0].Default != "default-tenant" {
+		t.Fatalf("expected default %q, got %q", "default-tenant", svc.Env[0].Default)
+	}
+
+	if !svc.Env[0].Required {
+		t.Fatal("expected env var to be required")
+	}
+}
+
+func TestRegistryRemoteToServiceHeaderVariables(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "header-var-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "header-var-server",
+				Remotes: []registry.Transport{
+					{
+						Type: "sse",
+						URL:  "https://example.com/sse",
+						Headers: []registry.KeyValueInput{
+							{
+								Name:  "Authorization",
+								Value: "Bearer {api_key}",
+								Variables: map[string]registry.InputField{
+									"api_key": {Description: "API key", IsRequired: true},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected entry with header variables to convert successfully")
+	}
+
+	if len(svc.Env) != 1 {
+		t.Fatalf("expected 1 env var, got %d", len(svc.Env))
+	}
+
+	if svc.Env[0].Name != "api_key" {
+		t.Fatalf("expected env var name %q, got %q", "api_key", svc.Env[0].Name)
+	}
+
+	if svc.Headers["Authorization"] != "Bearer {api_key}" {
+		t.Fatalf("expected header template %q, got %q", "Bearer {api_key}", svc.Headers["Authorization"])
+	}
+}
+
+func TestRegistryRemoteToServiceSecretHeaderNoTemplate(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "secret-header-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "secret-header-server",
+				Remotes: []registry.Transport{
+					{
+						Type: "streamable-http",
+						URL:  "https://example.com/mcp",
+						Headers: []registry.KeyValueInput{
+							{
+								Name:        "X-API-Key",
+								Description: "API key header",
+								IsSecret:    true,
+								IsRequired:  true,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected entry with secret header to convert successfully")
+	}
+
+	if len(svc.Env) != 1 {
+		t.Fatalf("expected 1 env var, got %d", len(svc.Env))
+	}
+
+	if svc.Env[0].Name != "X-API-Key" {
+		t.Fatalf("expected env var name %q, got %q", "X-API-Key", svc.Env[0].Name)
+	}
+
+	if svc.Headers["X-API-Key"] != "{X-API-Key}" {
+		t.Fatalf("expected header placeholder %q, got %q", "{X-API-Key}", svc.Headers["X-API-Key"])
+	}
+}
+
+func TestRegistryRemoteToServiceMergesRequiredOnDuplicate(t *testing.T) {
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "merge-server",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "merge-server",
+				Remotes: []registry.Transport{
+					{
+						Type: "streamable-http",
+						URL:  "https://{api_key}.example.com/mcp",
+						Variables: map[string]registry.InputField{
+							"api_key": {Description: "URL key", IsRequired: false},
+						},
+						Headers: []registry.KeyValueInput{
+							{
+								Name:  "Authorization",
+								Value: "Bearer {api_key}",
+								Variables: map[string]registry.InputField{
+									"api_key": {Description: "Auth key", IsRequired: true},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	svc, ok := registryRemoteToService(entry)
+	if !ok {
+		t.Fatal("expected entry to convert successfully")
+	}
+
+	if len(svc.Env) != 1 {
+		t.Fatalf("expected 1 deduplicated env var, got %d", len(svc.Env))
+	}
+
+	if !svc.Env[0].Required {
+		t.Fatal("expected required to be merged with OR (true wins)")
+	}
+
+	if svc.Env[0].Name != "api_key" {
+		t.Fatalf("expected env var name %q, got %q", "api_key", svc.Env[0].Name)
 	}
 }

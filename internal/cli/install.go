@@ -182,6 +182,10 @@ func executeInstall(cmd *cobra.Command, svc service.Service, targetDefinitions [
 		return err
 	}
 
+	if svc.Headers != nil {
+		applyRegistrySubstitutions(&svc, resolvedEnv)
+	}
+
 	printInstallPlan(cmd.OutOrStdout(), targetDefinitions)
 	autoAuthenticate := shouldAutoAuthenticate(cmd) && serviceUsesOAuth(svc)
 
@@ -269,4 +273,24 @@ func oauthManualAuthHint(targetDefinition target.Target) string {
 	default:
 		return ""
 	}
+}
+
+func applyRegistrySubstitutions(svc *service.Service, resolvedEnv map[string]string) {
+	svc.URL = substituteVars(svc.URL, resolvedEnv)
+
+	for name, tmpl := range svc.Headers {
+		svc.Headers[name] = substituteVars(tmpl, resolvedEnv)
+	}
+}
+
+func substituteVars(template string, values map[string]string) string {
+	result := template
+	for name, value := range values {
+		placeholder := "{" + name + "}"
+		if strings.Contains(result, placeholder) {
+			result = strings.ReplaceAll(result, placeholder, value)
+		}
+	}
+
+	return result
 }

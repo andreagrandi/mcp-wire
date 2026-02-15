@@ -149,7 +149,7 @@ func TestPickServiceInteractiveCatalogRegistryOnlyReturnsError(t *testing.T) {
 		t.Fatalf("expected trust summary in output, got %q", output.String())
 	}
 
-	if !strings.Contains(output.String(), "Registry services cannot be installed yet") {
+	if !strings.Contains(output.String(), "This registry service has no supported remote transport") {
 		t.Fatalf("expected rejection message, got %q", output.String())
 	}
 }
@@ -172,9 +172,13 @@ func TestPickServiceInteractiveCatalogDeclineTrustGoesBack(t *testing.T) {
 	reader := bufio.NewReader(strings.NewReader("\n1\nn\n\n1\ny\n"))
 	var output bytes.Buffer
 
-	_, err := pickServiceInteractiveCatalog(&output, reader, "registry")
-	if !errors.Is(err, errRegistryOnly) {
-		t.Fatalf("expected errRegistryOnly, got %v", err)
+	svc, err := pickServiceInteractiveCatalog(&output, reader, "registry")
+	if err != nil {
+		t.Fatalf("expected service to be returned after re-accepting trust, got %v", err)
+	}
+
+	if svc.Name != "gamma" {
+		t.Fatalf("expected service name %q, got %q", "gamma", svc.Name)
 	}
 
 	outputStr := output.String()

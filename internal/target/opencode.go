@@ -360,7 +360,7 @@ func buildOpenCodeServerConfig(svc service.Service, resolvedEnv map[string]strin
 		serverConfig["type"] = "remote"
 		serverConfig["url"] = url
 
-		headers := normalizeResolvedEnv(resolvedEnv)
+		headers := openCodeHeaders(svc, resolvedEnv)
 		if len(headers) > 0 {
 			serverConfig["headers"] = headers
 		}
@@ -373,7 +373,7 @@ func buildOpenCodeServerConfig(svc service.Service, resolvedEnv map[string]strin
 		serverConfig["type"] = "remote"
 		serverConfig["url"] = url
 
-		headers := normalizeResolvedEnv(resolvedEnv)
+		headers := openCodeHeaders(svc, resolvedEnv)
 		if len(headers) > 0 {
 			serverConfig["headers"] = headers
 		}
@@ -399,4 +399,12 @@ func buildOpenCodeServerConfig(svc service.Service, resolvedEnv map[string]strin
 	}
 
 	return serverConfig, nil
+}
+
+func openCodeHeaders(svc service.Service, resolvedEnv map[string]string) map[string]string {
+	if svc.Headers != nil {
+		return svc.Headers
+	}
+
+	return normalizeResolvedEnv(resolvedEnv)
 }

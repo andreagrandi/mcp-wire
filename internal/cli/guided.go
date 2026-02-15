@@ -432,11 +432,11 @@ func pickServiceInteractiveCatalog(output ioWriter, reader *bufio.Reader, source
 		svc, ok := catalogEntryToService(selected)
 		if !ok {
 			if source == "registry" {
-				fmt.Fprintln(output, "Registry services cannot be installed yet.")
+				fmt.Fprintln(output, "This registry service has no supported remote transport. Package-based install is not yet supported.")
 				return service.Service{}, errRegistryOnly
 			}
 
-			fmt.Fprintln(output, "Registry services cannot be installed yet. Choose a curated service.")
+			fmt.Fprintln(output, "This registry service has no supported remote transport. Package-based install is not yet supported. Choose a curated service.")
 			continue
 		}
 

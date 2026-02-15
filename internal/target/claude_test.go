@@ -237,6 +237,86 @@ func TestClaudeCodeTargetInstallWritesStdioServiceConfiguration(t *testing.T) {
 	}
 }
 
+func TestBuildClaudeCodeServerConfigHTTPWithHeaders(t *testing.T) {
+	svc := service.Service{
+		Name:      "header-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer token123",
+			"X-Custom":      "value",
+		},
+	}
+
+	config, err := buildClaudeCodeServerConfig(svc, nil)
+	if err != nil {
+		t.Fatalf("expected build to succeed: %v", err)
+	}
+
+	if config["type"] != "http" {
+		t.Fatalf("expected type http, got %v", config["type"])
+	}
+
+	if config["url"] != "https://example.com/mcp" {
+		t.Fatalf("expected url, got %v", config["url"])
+	}
+
+	headers, ok := config["headers"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected headers to be map[string]string, got %T", config["headers"])
+	}
+
+	if headers["Authorization"] != "Bearer token123" {
+		t.Fatalf("expected Authorization header, got %q", headers["Authorization"])
+	}
+
+	if headers["X-Custom"] != "value" {
+		t.Fatalf("expected X-Custom header, got %q", headers["X-Custom"])
+	}
+}
+
+func TestBuildClaudeCodeServerConfigSSEWithHeaders(t *testing.T) {
+	svc := service.Service{
+		Name:      "sse-header-service",
+		Transport: "sse",
+		URL:       "https://example.com/sse",
+		Headers: map[string]string{
+			"X-API-Key": "key123",
+		},
+	}
+
+	config, err := buildClaudeCodeServerConfig(svc, nil)
+	if err != nil {
+		t.Fatalf("expected build to succeed: %v", err)
+	}
+
+	headers, ok := config["headers"].(map[string]string)
+	if !ok {
+		t.Fatalf("expected headers to be map[string]string, got %T", config["headers"])
+	}
+
+	if headers["X-API-Key"] != "key123" {
+		t.Fatalf("expected X-API-Key header, got %q", headers["X-API-Key"])
+	}
+}
+
+func TestBuildClaudeCodeServerConfigHTTPWithoutHeaders(t *testing.T) {
+	svc := service.Service{
+		Name:      "no-header-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+	}
+
+	config, err := buildClaudeCodeServerConfig(svc, nil)
+	if err != nil {
+		t.Fatalf("expected build to succeed: %v", err)
+	}
+
+	if _, ok := config["headers"]; ok {
+		t.Fatal("expected no headers key when service has no headers")
+	}
+}
+
 func TestClaudeCodeTargetInstallReturnsErrorForInvalidTransport(t *testing.T) {
 	target := newTestClaudeCodeTarget(t)
 

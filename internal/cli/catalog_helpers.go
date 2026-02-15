@@ -150,5 +150,89 @@ func catalogEntryToService(entry catalog.Entry) (service.Service, bool) {
 		return *entry.Curated, true
 	}
 
+	if entry.Source == catalog.SourceRegistry && entry.Registry != nil {
+		return registryRemoteToService(entry)
+	}
+
 	return service.Service{}, false
+}
+
+func registryRemoteToService(entry catalog.Entry) (service.Service, bool) {
+	if entry.Registry == nil || len(entry.Registry.Server.Remotes) == 0 {
+		return service.Service{}, false
+	}
+
+	var remote registry.Transport
+	found := false
+	for _, r := range entry.Registry.Server.Remotes {
+		t := strings.ToLower(r.Type)
+		if t == "streamable-http" || t == "sse" {
+			remote = r
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		return service.Service{}, false
+	}
+
+	transport := strings.ToLower(remote.Type)
+	if transport == "streamable-http" {
+		transport = "http"
+	}
+
+	var envVars []service.EnvVar
+	seen := map[string]int{} // name -> index in envVars
+
+	addVar := func(name, description, defaultVal string, required bool) {
+		if name == "" {
+			return
+		}
+		if i, exists := seen[name]; exists {
+			envVars[i].Required = envVars[i].Required || required
+			if envVars[i].Description == "" && description != "" {
+				envVars[i].Description = description
+			}
+			return
+		}
+		seen[name] = len(envVars)
+		envVars = append(envVars, service.EnvVar{
+			Name:        name,
+			Description: description,
+			Required:    required,
+			Default:     defaultVal,
+		})
+	}
+
+	for varName, field := range remote.Variables {
+		addVar(varName, field.Description, field.Default, field.IsRequired)
+	}
+
+	headers := make(map[string]string, len(remote.Headers))
+	for _, hdr := range remote.Headers {
+		if hdr.Value != "" {
+			headers[hdr.Name] = hdr.Value
+			for varName, field := range hdr.Variables {
+				addVar(varName, field.Description, field.Default, field.IsRequired)
+			}
+		} else if hdr.IsSecret || hdr.IsRequired {
+			placeholder := "{" + hdr.Name + "}"
+			headers[hdr.Name] = placeholder
+			addVar(hdr.Name, hdr.Description, hdr.Default, hdr.IsRequired)
+		} else {
+			headers[hdr.Name] = hdr.Default
+		}
+	}
+
+	svc := service.Service{
+		Name:        entry.Registry.Server.Name,
+		Description: entry.Registry.Server.Description,
+		Transport:   transport,
+		URL:         remote.URL,
+		Env:         envVars,
+		Headers:     headers,
+	}
+
+	return svc, true
 }

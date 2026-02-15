@@ -764,7 +764,7 @@ Suggested order for shipping gradually:
 3. ✅ Cache/index + local search.
 4. ✅ `list services` source filter (`curated` default).
 5. ✅ Guided UI source step and merged list markers.
-6. Registry remote-install support.
+6. ✅ Registry remote-install support.
 7. Runtime preflight warnings.
 8. Registry package-install support.
 9. Status/uninstall parity for mixed sources.

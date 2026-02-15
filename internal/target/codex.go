@@ -263,9 +263,11 @@ func buildCodexServerConfig(svc service.Service, resolvedEnv map[string]string) 
 
 		serverConfig["url"] = url
 
-		bearerEnvVar := pickBearerEnvVar(svc, resolvedEnv)
-		if bearerEnvVar != "" {
-			serverConfig["bearer_token_env_var"] = bearerEnvVar
+		if svc.Headers == nil {
+			bearerEnvVar := pickBearerEnvVar(svc, resolvedEnv)
+			if bearerEnvVar != "" {
+				serverConfig["bearer_token_env_var"] = bearerEnvVar
+			}
 		}
 	case "sse":
 		url := strings.TrimSpace(svc.URL)
@@ -275,9 +277,11 @@ func buildCodexServerConfig(svc service.Service, resolvedEnv map[string]string) 
 
 		serverConfig["url"] = url
 
-		bearerEnvVar := pickBearerEnvVar(svc, resolvedEnv)
-		if bearerEnvVar != "" {
-			serverConfig["bearer_token_env_var"] = bearerEnvVar
+		if svc.Headers == nil {
+			bearerEnvVar := pickBearerEnvVar(svc, resolvedEnv)
+			if bearerEnvVar != "" {
+				serverConfig["bearer_token_env_var"] = bearerEnvVar
+			}
 		}
 	case "stdio":
 		command := strings.TrimSpace(svc.Command)

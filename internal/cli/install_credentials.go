@@ -49,10 +49,21 @@ func resolveServiceCredentials(
 		}
 
 		if !envVar.Required {
+			defaultValue := strings.TrimSpace(envVar.Default)
+			if defaultValue != "" {
+				resolvedEnv[envName] = defaultValue
+			}
 			continue
 		}
 
+		defaultValue := strings.TrimSpace(envVar.Default)
+
 		if opts.noPrompt {
+			if defaultValue != "" {
+				resolvedEnv[envName] = defaultValue
+				continue
+			}
+
 			return nil, fmt.Errorf("required credential %q not found and prompting is disabled", envName)
 		}
 
@@ -135,10 +146,20 @@ func promptForCredentialValue(
 		fmt.Fprintln(opts.output)
 	}
 
+	defaultValue := strings.TrimSpace(envVar.Default)
+	promptLabel := "  Enter value: "
+	if defaultValue != "" {
+		promptLabel = fmt.Sprintf("  Enter value [default: %s]: ", defaultValue)
+	}
+
 	for {
-		value, err := promptSecretValue(reader, opts, "  Enter value: ")
+		value, err := promptSecretValue(reader, opts, promptLabel)
 		if err != nil {
 			return "", fmt.Errorf("read credential value for %q: %w", envName, err)
+		}
+
+		if value == "" && defaultValue != "" {
+			value = defaultValue
 		}
 
 		if value == "" {

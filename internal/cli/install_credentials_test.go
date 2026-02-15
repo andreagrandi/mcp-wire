@@ -256,6 +256,158 @@ func TestResolveServiceCredentialsReturnsOpenURLError(t *testing.T) {
 	}
 }
 
+func TestPromptCredentialDefaultAccepted(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "TENANT", Description: "Tenant ID", Required: true, Default: "default-tenant"},
+		},
+	}
+
+	var output bytes.Buffer
+	resolved, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{
+		input:      strings.NewReader("\nn\n"),
+		output:     &output,
+		fileSource: &fakeCredentialSource{name: "file"},
+	})
+	if err != nil {
+		t.Fatalf("expected default flow to succeed: %v", err)
+	}
+
+	if resolved["TENANT"] != "default-tenant" {
+		t.Fatalf("expected default value %q, got %q", "default-tenant", resolved["TENANT"])
+	}
+
+	console := output.String()
+	if !strings.Contains(console, "[default: default-tenant]") {
+		t.Fatalf("expected default hint in prompt, got %q", console)
+	}
+}
+
+func TestPromptCredentialDefaultOverridden(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "TENANT", Description: "Tenant ID", Required: true, Default: "default-tenant"},
+		},
+	}
+
+	var output bytes.Buffer
+	resolved, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{
+		input:      strings.NewReader("custom-tenant\nn\n"),
+		output:     &output,
+		fileSource: &fakeCredentialSource{name: "file"},
+	})
+	if err != nil {
+		t.Fatalf("expected override flow to succeed: %v", err)
+	}
+
+	if resolved["TENANT"] != "custom-tenant" {
+		t.Fatalf("expected overridden value %q, got %q", "custom-tenant", resolved["TENANT"])
+	}
+}
+
+func TestCountMissingRequiredCredentialsIncludesDefaults(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "TOKEN", Required: true},
+			{Name: "TENANT", Required: true, Default: "default-tenant"},
+		},
+	}
+
+	missing := countMissingRequiredCredentials(svc, resolver)
+	if missing != 2 {
+		t.Fatalf("expected 2 missing credentials (both unresolved), got %d", missing)
+	}
+}
+
+func TestNoPromptUsesDefaultForRequiredCredential(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "TENANT", Required: true, Default: "default-tenant"},
+		},
+	}
+
+	resolved, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{noPrompt: true})
+	if err != nil {
+		t.Fatalf("expected no-prompt with default to succeed: %v", err)
+	}
+
+	if resolved["TENANT"] != "default-tenant" {
+		t.Fatalf("expected default value %q, got %q", "default-tenant", resolved["TENANT"])
+	}
+}
+
+func TestNoPromptFailsWithoutDefault(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "TOKEN", Required: true},
+		},
+	}
+
+	_, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{noPrompt: true})
+	if err == nil {
+		t.Fatal("expected no-prompt without default to fail")
+	}
+
+	if !strings.Contains(err.Error(), "TOKEN") {
+		t.Fatalf("expected error to mention TOKEN, got %v", err)
+	}
+}
+
+func TestOptionalVarWithDefaultPopulatesResolvedEnv(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "REGION", Required: false, Default: "us-east-1"},
+		},
+	}
+
+	resolved, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{noPrompt: true})
+	if err != nil {
+		t.Fatalf("expected optional var with default to succeed: %v", err)
+	}
+
+	if resolved["REGION"] != "us-east-1" {
+		t.Fatalf("expected default value %q, got %q", "us-east-1", resolved["REGION"])
+	}
+}
+
+func TestOptionalVarWithoutDefaultSkipped(t *testing.T) {
+	resolver := credential.NewResolver(&fakeCredentialSource{values: map[string]string{}})
+
+	svc := service.Service{
+		Name: "demo-service",
+		Env: []service.EnvVar{
+			{Name: "OPTIONAL_VALUE", Required: false},
+		},
+	}
+
+	resolved, err := resolveServiceCredentials(svc, resolver, interactiveCredentialOptions{noPrompt: true})
+	if err != nil {
+		t.Fatalf("expected optional var without default to succeed: %v", err)
+	}
+
+	if _, ok := resolved["OPTIONAL_VALUE"]; ok {
+		t.Fatal("expected optional var without default to be absent from resolvedEnv")
+	}
+}
+
 func TestBrowserOpenCommandDarwin(t *testing.T) {
 	cmd, err := browserOpenCommand("darwin", "https://example.com")
 	if err != nil {

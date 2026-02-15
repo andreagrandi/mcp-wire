@@ -123,6 +123,97 @@ func TestOpenCodeTargetInstallCreatesConfigAndAddsRemoteService(t *testing.T) {
 	}
 }
 
+func TestOpenCodeTargetInstallUsesExplicitHeaders(t *testing.T) {
+	target := newTestOpenCodeTarget(t)
+
+	svc := service.Service{
+		Name:      "registry-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+		Headers: map[string]string{
+			"Authorization": "Bearer my-token",
+			"X-Static":      "static-value",
+		},
+	}
+
+	resolvedEnv := map[string]string{
+		"tenant": "acme",
+	}
+
+	err := target.Install(svc, resolvedEnv)
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readOpenCodeConfigFile(t, target.configPath)
+	mcpEntries := mustMapValue(t, config["mcp"], "mcp")
+	serviceConfig := mustMapValue(t, mcpEntries["registry-service"], "mcp.registry-service")
+
+	headers := mustMapValue(t, serviceConfig["headers"], "mcp.registry-service.headers")
+	if headers["Authorization"] != "Bearer my-token" {
+		t.Fatalf("expected Authorization header, got %#v", headers["Authorization"])
+	}
+
+	if headers["X-Static"] != "static-value" {
+		t.Fatalf("expected X-Static header, got %#v", headers["X-Static"])
+	}
+
+	if _, ok := headers["tenant"]; ok {
+		t.Fatal("expected tenant env var not to appear in headers when svc.Headers is set")
+	}
+}
+
+func TestOpenCodeTargetInstallRegistryURLOnlyNoSpuriousHeaders(t *testing.T) {
+	target := newTestOpenCodeTarget(t)
+
+	svc := service.Service{
+		Name:      "url-var-service",
+		Transport: "http",
+		URL:       "https://acme.example.com/mcp",
+		Headers:   map[string]string{},
+	}
+
+	resolvedEnv := map[string]string{
+		"region": "us",
+	}
+
+	err := target.Install(svc, resolvedEnv)
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readOpenCodeConfigFile(t, target.configPath)
+	mcpEntries := mustMapValue(t, config["mcp"], "mcp")
+	serviceConfig := mustMapValue(t, mcpEntries["url-var-service"], "mcp.url-var-service")
+
+	if _, ok := serviceConfig["headers"]; ok {
+		t.Fatalf("expected no headers for URL-variable-only registry remote, got %#v", serviceConfig["headers"])
+	}
+}
+
+func TestOpenCodeTargetInstallNoHeadersWhenBothEmpty(t *testing.T) {
+	target := newTestOpenCodeTarget(t)
+
+	svc := service.Service{
+		Name:      "no-header-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+	}
+
+	err := target.Install(svc, nil)
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readOpenCodeConfigFile(t, target.configPath)
+	mcpEntries := mustMapValue(t, config["mcp"], "mcp")
+	serviceConfig := mustMapValue(t, mcpEntries["no-header-service"], "mcp.no-header-service")
+
+	if _, ok := serviceConfig["headers"]; ok {
+		t.Fatal("expected no headers key when both svc.Headers and resolvedEnv are empty")
+	}
+}
+
 func TestOpenCodeTargetInstallWritesLocalServiceConfiguration(t *testing.T) {
 	target := newTestOpenCodeTarget(t)
 

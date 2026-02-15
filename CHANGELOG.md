@@ -7,10 +7,19 @@
 - `list services --source all` now marks curated entries with a `*` prefix and prints a legend line; single-source views show no markers.
 - `--source` flag on `list services` is now visible in help output when the registry feature is enabled, and hidden otherwise.
 - Selecting a registry service now shows a trust/safety summary (source, install type, transport, required secrets, repository URL) and requires explicit confirmation before proceeding, in both plain and survey UIs.
+- Registry entries with `streamable-http` or `sse` remotes can now be installed end-to-end: URL/header variable prompting, placeholder substitution, and per-target config generation.
+- `Service` model now carries explicit `Headers` (for registry remote header templates) and `EnvVar.Default` (for variable defaults from the registry schema).
+- Claude Code target emits a `headers` map in server config when explicit headers are defined.
+- OpenCode target uses explicit `svc.Headers` for registry remotes instead of deriving headers from resolved env vars.
+- Codex target skips `bearer_token_env_var` for registry remotes (where env vars are URL/header substitution variables, not bearer tokens).
+- `--no-prompt` mode now silently applies default values for required and optional env vars, enabling non-interactive installs of registry services with defaulted variables.
+- Optional env vars with defaults are populated into resolved env so URL/header substitution can use them.
 
 ### Changed
 - Selecting a registry service in the install/uninstall wizard shows a rejection message and returns to source selection instead of looping indefinitely.
 - Catalog display in wizards and `list services` uses `*` curated markers instead of `[registry]` suffix tags when showing mixed sources.
+- Registry rejection message now reads "This registry service has no supported remote transport. Package-based install is not yet supported." instead of the generic "Registry services cannot be installed yet."
+- Duplicate env vars from URL variables and header variables are now merged with OR on `Required`, matching the existing `envVarsFromRegistry` dedup pattern.
 
 ## v0.1.3 - 2026-02-14
 

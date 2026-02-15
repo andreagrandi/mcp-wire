@@ -120,6 +120,70 @@ func TestCodexTargetInstallCreatesHTTPServiceUsingBearerTokenEnvVar(t *testing.T
 	}
 }
 
+func TestCodexTargetInstallSkipsBearerTokenWhenHeadersSet(t *testing.T) {
+	target := newTestCodexTarget(t)
+
+	svc := service.Service{
+		Name:      "registry-service",
+		Transport: "http",
+		URL:       "https://example.com/mcp",
+		Env: []service.EnvVar{
+			{Name: "tenant", Required: true},
+		},
+		Headers: map[string]string{
+			"Authorization": "Bearer my-token",
+		},
+	}
+
+	err := target.Install(svc, map[string]string{"tenant": "acme"})
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readCodexConfigFile(t, target.configPath)
+	mcpServers := mustMapValue(t, config["mcp_servers"], "mcp_servers")
+	serviceConfig := mustMapValue(t, mcpServers["registry-service"], "mcp_servers.registry-service")
+
+	if serviceConfig["url"] != "https://example.com/mcp" {
+		t.Fatalf("expected URL to be set, got %#v", serviceConfig["url"])
+	}
+
+	if _, ok := serviceConfig["bearer_token_env_var"]; ok {
+		t.Fatalf("expected no bearer_token_env_var when svc.Headers is set, got %#v", serviceConfig["bearer_token_env_var"])
+	}
+}
+
+func TestCodexTargetInstallSkipsBearerTokenForURLOnlyRegistryRemote(t *testing.T) {
+	target := newTestCodexTarget(t)
+
+	svc := service.Service{
+		Name:      "url-var-service",
+		Transport: "http",
+		URL:       "https://acme.example.com/mcp",
+		Env: []service.EnvVar{
+			{Name: "region", Required: true},
+		},
+		Headers: map[string]string{},
+	}
+
+	err := target.Install(svc, map[string]string{"region": "us"})
+	if err != nil {
+		t.Fatalf("expected install to succeed: %v", err)
+	}
+
+	config := readCodexConfigFile(t, target.configPath)
+	mcpServers := mustMapValue(t, config["mcp_servers"], "mcp_servers")
+	serviceConfig := mustMapValue(t, mcpServers["url-var-service"], "mcp_servers.url-var-service")
+
+	if serviceConfig["url"] != "https://acme.example.com/mcp" {
+		t.Fatalf("expected URL to be set, got %#v", serviceConfig["url"])
+	}
+
+	if _, ok := serviceConfig["bearer_token_env_var"]; ok {
+		t.Fatalf("expected no bearer_token_env_var for URL-variable-only registry remote, got %#v", serviceConfig["bearer_token_env_var"])
+	}
+}
+
 func TestCodexTargetInstallPreservesUnknownTopLevelKeys(t *testing.T) {
 	target := newTestCodexTarget(t)
 
