@@ -142,7 +142,9 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 		RegistrySyncStatus: func() string {
 			return registrySyncStatusLine(registryEnabled)
 		},
-		RegistryEnabled: registryEnabled,
+		RefreshRegistryEntry:  refreshRegistryEntry,
+		CatalogEntryToService: catalogEntryToService,
+		RegistryEnabled:       registryEnabled,
 	}
 }
 

@@ -883,7 +883,7 @@ Live-filtered search over curated and/or registry catalog.
 
 Acceptance: Search filters live. Scroll works. Enter selects.
 
-### 8.4 — Registry Trust Warning (Screen 4)
+### 8.4 — Registry Trust Warning (Screen 4) ✅
 
 Shown after selecting a non-curated service. Displays service metadata (source, transport, URL, repo) and horizontal Yes/No choice.
 

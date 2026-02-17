@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 )
 
@@ -448,6 +449,206 @@ func TestWizardModel_ContentHeight(t *testing.T) {
 	// Very small terminal.
 	model.height = ChromeLines
 	assert.Equal(t, 1, model.contentHeight())
+}
+
+func TestWizardModel_RegistryServiceShowsTrustScreen(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to service screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	// Select a registry entry.
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc", Description: "A service"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	_, isTrust := wm.screen.(*TrustScreen)
+	assert.True(t, isTrust)
+}
+
+func TestWizardModel_CuratedServiceSkipsTrustScreen(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	// Select a curated entry — should skip trust and go to placeholder.
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+}
+
+func TestWizardModel_TrustConfirmYesShowsPlaceholder(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to trust screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Confirm trust.
+	updated, _ = wm.Update(trustConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "mcp-wire install community-svc")
+}
+
+func TestWizardModel_TrustConfirmNoGoesBackToService(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to trust screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Reject trust.
+	updated, _ = wm.Update(trustConfirmMsg{confirmed: false})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
+}
+
+func TestWizardModel_TrustBreadcrumb(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	require.Len(t, wm.steps, 3)
+	assert.True(t, wm.steps[0].Completed)
+	assert.Equal(t, "Registry", wm.steps[0].Value)
+	assert.True(t, wm.steps[1].Completed)
+	assert.Equal(t, "community-svc", wm.steps[1].Value)
+	assert.True(t, wm.steps[2].Active)
+	assert.Equal(t, "Trust", wm.steps[2].Label)
+}
+
+func TestWizardModel_BackFromTrustGoesToService(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to trust screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	_, isTrust := wm.screen.(*TrustScreen)
+	require.True(t, isTrust)
+
+	// Back from trust goes to service screen.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
+	assert.Empty(t, wm.state.Entry.Name)
+}
+
+func TestWizardModel_TrustRefreshesEntry(t *testing.T) {
+	cb := testCallbacksWithRegistry()
+	refreshed := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name:        "community-svc",
+				Description: "Refreshed description",
+			},
+		},
+	}
+	cb.RefreshRegistryEntry = func(_ catalog.Entry) catalog.Entry {
+		return refreshed
+	}
+
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate to trust screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{
+		Source: catalog.SourceRegistry,
+		Name:   "community-svc",
+		Registry: &registry.ServerResponse{
+			Server: registry.ServerJSON{Name: "community-svc"},
+		},
+	}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Confirm trust — entry should be refreshed.
+	updated, _ = wm.Update(trustConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	assert.Equal(t, "Refreshed description", wm.state.Entry.Description())
 }
 
 func TestWizardModel_ViewNoBreadcrumbOnMenu(t *testing.T) {

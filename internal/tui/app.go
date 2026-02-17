@@ -8,17 +8,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/service"
 )
 
 // Callbacks provides functions that generate output for display in the TUI
 // and configuration flags that control wizard behavior.
 type Callbacks struct {
-	RenderStatus       func(w io.Writer) error
-	RenderServicesList func(w io.Writer) error
-	RenderTargetsList  func(w io.Writer) error
-	LoadCatalog        func(source string) (*catalog.Catalog, error)
-	RegistrySyncStatus func() string
-	RegistryEnabled    bool
+	RenderStatus          func(w io.Writer) error
+	RenderServicesList    func(w io.Writer) error
+	RenderTargetsList     func(w io.Writer) error
+	LoadCatalog           func(source string) (*catalog.Catalog, error)
+	RegistrySyncStatus    func() string
+	RefreshRegistryEntry  func(catalog.Entry) catalog.Entry
+	CatalogEntryToService func(catalog.Entry) (service.Service, bool)
+	RegistryEnabled       bool
 }
 
 // WizardState holds the accumulated selections across wizard screens.
@@ -75,6 +78,9 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case serviceSelectMsg:
 		return m.handleServiceSelect(msg)
+
+	case trustConfirmMsg:
+		return m.handleTrustConfirm(msg)
 
 	case BackMsg:
 		return m.handleBack()
@@ -194,7 +200,46 @@ func (m WizardModel) showServiceScreen() (tea.Model, tea.Cmd) {
 
 func (m WizardModel) handleServiceSelect(msg serviceSelectMsg) (tea.Model, tea.Cmd) {
 	m.state.Entry = msg.entry
+
+	if registryEntryNeedsConfirmation(msg.entry) {
+		return m.showTrustScreen()
+	}
+
 	return m.showTargetPlaceholder()
+}
+
+func (m WizardModel) handleTrustConfirm(msg trustConfirmMsg) (tea.Model, tea.Cmd) {
+	if !msg.confirmed {
+		// Back to service selection.
+		return m.showServiceScreen()
+	}
+
+	// Refresh the entry with latest details.
+	if m.callbacks.RefreshRegistryEntry != nil {
+		m.state.Entry = m.callbacks.RefreshRegistryEntry(m.state.Entry)
+	}
+
+	return m.showTargetPlaceholder()
+}
+
+func (m WizardModel) showTrustScreen() (tea.Model, tea.Cmd) {
+	var steps []BreadcrumbStep
+	if m.callbacks.RegistryEnabled {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Source", Value: sourceValueLabel(m.state.Source),
+			Completed: true, Visible: true,
+		})
+	}
+	steps = append(steps, BreadcrumbStep{
+		Label: "Service", Value: m.state.Entry.Name,
+		Completed: true, Visible: true,
+	})
+	steps = append(steps, BreadcrumbStep{
+		Label: "Trust", Active: true, Visible: true,
+	})
+	m.steps = steps
+	m.screen = NewTrustScreen(m.theme, m.state.Entry)
+	return m, m.screen.Init()
 }
 
 // showTargetPlaceholder shows a placeholder for the target selection screen
@@ -221,6 +266,11 @@ func (m WizardModel) showTargetPlaceholder() (tea.Model, tea.Cmd) {
 
 func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen.(type) {
+	case *TrustScreen:
+		// Back from trust goes to service selection.
+		m.state.Entry = catalog.Entry{}
+		return m.showServiceScreen()
+
 	case *ServiceScreen:
 		if m.callbacks.RegistryEnabled {
 			// Back to source selection.
