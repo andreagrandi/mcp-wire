@@ -357,7 +357,7 @@ func TestWizardModel_BackFromServiceToSource(t *testing.T) {
 	_, isSource := wm.screen.(*SourceScreen)
 	assert.True(t, isSource)
 	assert.Equal(t, "install", wm.state.Action) // action preserved
-	assert.Empty(t, wm.state.Source)             // source cleared
+	assert.Empty(t, wm.state.Source)            // source cleared
 }
 
 func TestWizardModel_BackFromServiceNoRegistryGoesToMenu(t *testing.T) {

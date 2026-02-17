@@ -335,7 +335,7 @@ func (s *ServiceScreen) StatusHints() []KeyHint {
 
 // Testing accessors.
 
-func (s *ServiceScreen) CursorPos() int           { return s.cursor }
+func (s *ServiceScreen) CursorPos() int            { return s.cursor }
 func (s *ServiceScreen) OffsetPos() int            { return s.offset }
 func (s *ServiceScreen) Filtered() []catalog.Entry { return s.filtered }
 func (s *ServiceScreen) IsLoading() bool           { return s.loading }
