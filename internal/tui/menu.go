@@ -19,6 +19,7 @@ var menuItems = []string{
 type MenuScreen struct {
 	theme  Theme
 	cursor int
+	width  int
 }
 
 // NewMenuScreen creates a new main menu screen.
@@ -30,6 +31,10 @@ func (m *MenuScreen) Init() tea.Cmd { return nil }
 
 func (m *MenuScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "k":
@@ -60,7 +65,14 @@ func (m *MenuScreen) View() string {
 
 	for i, item := range menuItems {
 		if i == m.cursor {
-			b.WriteString("  " + m.theme.Cursor.Render("\u25b8 "+item))
+			label := "  \u276f " + item
+			if m.width > 0 {
+				b.WriteString(m.theme.Highlight.Width(m.width).Render(label))
+			} else {
+				b.WriteString(m.theme.Cursor.Render(label))
+			}
+		} else if item == "Exit" {
+			b.WriteString(m.theme.Dim.Render("    " + item))
 		} else {
 			b.WriteString("    " + item)
 		}
@@ -72,8 +84,8 @@ func (m *MenuScreen) View() string {
 
 func (m *MenuScreen) StatusHints() []KeyHint {
 	return []KeyHint{
-		{Key: "\u2191\u2193", Desc: "navigate"},
-		{Key: "enter", Desc: "select"},
+		{Key: "\u2191\u2193", Desc: "move"},
+		{Key: "Enter", Desc: "select"},
 		{Key: "q", Desc: "quit"},
 	}
 }

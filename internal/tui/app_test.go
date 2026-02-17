@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"errors"
+	"io"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -8,22 +10,40 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func testCallbacks() Callbacks {
+	return Callbacks{
+		RenderStatus: func(w io.Writer) error {
+			_, err := w.Write([]byte("Status output"))
+			return err
+		},
+		RenderServicesList: func(w io.Writer) error {
+			_, err := w.Write([]byte("Services output"))
+			return err
+		},
+		RenderTargetsList: func(w io.Writer) error {
+			_, err := w.Write([]byte("Targets output"))
+			return err
+		},
+	}
+}
+
 func TestNewWizardModel(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 
 	assert.NotNil(t, model.screen)
 	assert.Empty(t, model.steps)
 	assert.Equal(t, 0, model.width)
 	assert.Equal(t, 0, model.height)
+	assert.Equal(t, "1.0.0", model.version)
 }
 
 func TestWizardModel_Init(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 	assert.Nil(t, model.Init())
 }
 
 func TestWizardModel_WindowSizeMsg(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 
 	updated, _ := model.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	wm := updated.(WizardModel)
@@ -32,8 +52,29 @@ func TestWizardModel_WindowSizeMsg(t *testing.T) {
 	assert.Equal(t, 40, wm.height)
 }
 
+func TestWizardModel_WindowSizeMsgForwardedToScreen(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 30
+
+	// Navigate to an output screen so we can verify resize forwarding.
+	updated, _ := model.Update(menuSelectMsg{item: "Status"})
+	wm := updated.(WizardModel)
+
+	screen, ok := wm.screen.(*OutputScreen)
+	require.True(t, ok)
+	originalHeight := screen.viewHeight
+
+	// Resize terminal.
+	updated, _ = wm.Update(tea.WindowSizeMsg{Width: 80, Height: 50})
+	wm = updated.(WizardModel)
+
+	screen = wm.screen.(*OutputScreen)
+	assert.NotEqual(t, originalHeight, screen.viewHeight)
+	assert.Equal(t, 50-ChromeLines, screen.viewHeight)
+}
+
 func TestWizardModel_CtrlCQuits(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 
 	_, cmd := model.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	require.NotNil(t, cmd)
@@ -44,7 +85,7 @@ func TestWizardModel_CtrlCQuits(t *testing.T) {
 }
 
 func TestWizardModel_ExitMenuQuits(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 
 	_, cmd := model.Update(menuSelectMsg{item: "Exit"})
 	require.NotNil(t, cmd)
@@ -54,18 +95,112 @@ func TestWizardModel_ExitMenuQuits(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestWizardModel_UnhandledMenuActionNoOp(t *testing.T) {
-	model := NewWizardModel()
+func TestWizardModel_StatusShowsOutput(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
 
-	updated, cmd := model.Update(menuSelectMsg{item: "Status"})
+	updated, _ := model.Update(menuSelectMsg{item: "Status"})
 	wm := updated.(WizardModel)
 
-	assert.Nil(t, cmd)
-	assert.NotNil(t, wm.screen)
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "Status output")
+}
+
+func TestWizardModel_ListServicesShowsOutput(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "List services"})
+	wm := updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "Services output")
+}
+
+func TestWizardModel_ListTargetsShowsOutput(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "List targets"})
+	wm := updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "Targets output")
+}
+
+func TestWizardModel_CallbackError(t *testing.T) {
+	cb := Callbacks{
+		RenderStatus: func(w io.Writer) error {
+			return errors.New("something went wrong")
+		},
+	}
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Status"})
+	wm := updated.(WizardModel)
+
+	assert.Contains(t, wm.screen.View(), "Error: something went wrong")
+}
+
+func TestWizardModel_NilCallback(t *testing.T) {
+	model := NewWizardModel(Callbacks{}, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Status"})
+	wm := updated.(WizardModel)
+
+	assert.Contains(t, wm.screen.View(), "not available")
+}
+
+func TestWizardModel_InstallShowsPlaceholder(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "mcp-wire install")
+}
+
+func TestWizardModel_UninstallShowsPlaceholder(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "mcp-wire uninstall")
+}
+
+func TestWizardModel_BackFromOutputReturnsToMenu(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Go to Status output.
+	updated, _ := model.Update(menuSelectMsg{item: "Status"})
+	wm := updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	require.True(t, isOutput)
+
+	// Back returns to menu.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isMenu := wm.screen.(*MenuScreen)
+	assert.True(t, isMenu)
 }
 
 func TestWizardModel_BackMsg(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.steps = []BreadcrumbStep{
 		{Label: "Source", Active: true, Visible: true},
 	}
@@ -79,34 +214,45 @@ func TestWizardModel_BackMsg(t *testing.T) {
 }
 
 func TestWizardModel_ViewLayout(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "0.1.3")
 	model.width = 80
 	model.height = 20
 
 	view := model.View()
 
-	assert.Contains(t, view, "mcp-wire")
+	assert.Contains(t, view, "mcp-wire v0.1.3")
+	assert.Contains(t, view, "\u2500") // separator
 	assert.Contains(t, view, "Install service")
-	assert.Contains(t, view, "navigate")
+	assert.Contains(t, view, "move")
+}
+
+func TestWizardModel_ViewNoVersion(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "")
+	model.width = 80
+	model.height = 20
+
+	view := model.View()
+	assert.Contains(t, view, "mcp-wire")
+	assert.NotContains(t, view, "mcp-wire v")
 }
 
 func TestWizardModel_ContentHeight(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 
 	// Unknown height returns default.
 	assert.Equal(t, ContentHeight, model.contentHeight())
 
-	// Known height subtracts title + status bar.
+	// Known height subtracts chrome.
 	model.height = 30
-	assert.Equal(t, 28, model.contentHeight())
+	assert.Equal(t, 30-ChromeLines, model.contentHeight())
 
 	// Very small terminal.
-	model.height = 2
+	model.height = ChromeLines
 	assert.Equal(t, 1, model.contentHeight())
 }
 
 func TestWizardModel_ViewNoBreadcrumbOnMenu(t *testing.T) {
-	model := NewWizardModel()
+	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.width = 80
 	model.height = 20
 
@@ -116,11 +262,20 @@ func TestWizardModel_ViewNoBreadcrumbOnMenu(t *testing.T) {
 	assert.NotContains(t, view, "\u203a")
 }
 
+func TestContentHeightFromTerminal(t *testing.T) {
+	assert.Equal(t, ContentHeight, contentHeightFromTerminal(0))
+	assert.Equal(t, ContentHeight, contentHeightFromTerminal(-1))
+	assert.Equal(t, 1, contentHeightFromTerminal(1))
+	assert.Equal(t, 1, contentHeightFromTerminal(ChromeLines))
+	assert.Equal(t, 20-ChromeLines, contentHeightFromTerminal(20))
+	assert.Equal(t, 50-ChromeLines, contentHeightFromTerminal(50))
+}
+
 func TestPadToHeight(t *testing.T) {
 	tests := []struct {
-		name     string
-		content  string
-		target   int
+		name      string
+		content   string
+		target    int
 		wantLines int
 	}{
 		{"empty to 5", "", 5, 5},

@@ -48,7 +48,7 @@ func runGuidedMainMenu(cmd *cobra.Command) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
 		cfg, err := loadConfig()
 		if err == nil && cfg.IsFeatureEnabled("tui") {
-			return tui.Run()
+			return tui.Run(tuiCallbacks(), app.Version)
 		}
 
 		return runGuidedMainMenuSurvey(cmd)
@@ -112,6 +112,27 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 		default:
 			fmt.Fprintf(output, "Invalid option %q. Enter 1-6.\n\n", choice)
 		}
+	}
+}
+
+func tuiCallbacks() tui.Callbacks {
+	return tui.Callbacks{
+		RenderStatus: func(w io.Writer) error {
+			return runStatusFlow(w, targetpkg.ConfigScopeEffective)
+		},
+		RenderServicesList: func(w io.Writer) error {
+			services, err := loadServices()
+			if err != nil {
+				return fmt.Errorf("load services: %w", err)
+			}
+
+			printServicesList(w, services)
+			return nil
+		},
+		RenderTargetsList: func(w io.Writer) error {
+			printTargetsList(w, allTargets())
+			return nil
+		},
 	}
 }
 

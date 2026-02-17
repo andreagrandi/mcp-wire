@@ -22,4 +22,6 @@ func TestNewTheme(t *testing.T) {
 	assert.NotEmpty(t, theme.Cursor.Render("test"))
 	assert.NotEmpty(t, theme.Selected.Render("test"))
 	assert.NotEmpty(t, theme.BreadSep.Render("test"))
+	assert.NotEmpty(t, theme.Highlight.Render("test"))
+	assert.NotEmpty(t, theme.Separator.Render("test"))
 }

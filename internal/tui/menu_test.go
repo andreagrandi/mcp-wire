@@ -129,7 +129,7 @@ func TestMenuScreen_StatusHints(t *testing.T) {
 		hintKeys[i] = h.Desc
 	}
 
-	assert.Contains(t, hintKeys, "navigate")
+	assert.Contains(t, hintKeys, "move")
 	assert.Contains(t, hintKeys, "select")
 	assert.Contains(t, hintKeys, "quit")
 }

@@ -6,6 +6,10 @@ import "github.com/charmbracelet/lipgloss"
 // when the terminal height is unknown.
 const ContentHeight = 13
 
+// ChromeLines is the number of fixed lines used by the layout frame
+// (title bar + separator + status bar).
+const ChromeLines = 3
+
 // Theme holds Lip Gloss styles for the TUI.
 type Theme struct {
 	Title     lipgloss.Style
@@ -20,6 +24,8 @@ type Theme struct {
 	Cursor    lipgloss.Style
 	Selected  lipgloss.Style
 	BreadSep  lipgloss.Style
+	Highlight lipgloss.Style
+	Separator lipgloss.Style
 }
 
 // NewTheme creates a Theme with the default color palette.
@@ -29,6 +35,7 @@ func NewTheme() Theme {
 	yellow := lipgloss.Color("3")
 	red := lipgloss.Color("1")
 	dim := lipgloss.Color("8")
+	blue := lipgloss.Color("4")
 
 	return Theme{
 		Title:     lipgloss.NewStyle().Bold(true),
@@ -43,5 +50,7 @@ func NewTheme() Theme {
 		Cursor:    lipgloss.NewStyle().Bold(true).Foreground(cyan),
 		Selected:  lipgloss.NewStyle().Foreground(green),
 		BreadSep:  lipgloss.NewStyle().Foreground(dim),
+		Highlight: lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(blue),
+		Separator: lipgloss.NewStyle().Foreground(blue),
 	}
 }
