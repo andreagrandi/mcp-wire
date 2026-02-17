@@ -8,12 +8,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Callbacks provides functions that generate output for display in the TUI.
-// Each function writes pre-formatted text to the given writer.
+// Callbacks provides functions that generate output for display in the TUI
+// and configuration flags that control wizard behavior.
 type Callbacks struct {
 	RenderStatus       func(w io.Writer) error
 	RenderServicesList func(w io.Writer) error
 	RenderTargetsList  func(w io.Writer) error
+	RegistryEnabled    bool
 }
 
 // WizardState holds the accumulated selections across wizard screens.
@@ -64,8 +65,12 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case menuSelectMsg:
 		return m.handleMenuSelect(msg)
 
+	case sourceSelectMsg:
+		return m.handleSourceSelect(msg)
+
 	case BackMsg:
 		m.screen = NewMenuScreen(m.theme)
+		m.state = WizardState{}
 		m.steps = nil
 		return m, m.screen.Init()
 	}
@@ -132,16 +137,59 @@ func (m WizardModel) handleMenuSelect(msg menuSelectMsg) (tea.Model, tea.Cmd) {
 		m.screen = m.renderToOutput(m.callbacks.RenderTargetsList)
 		return m, m.screen.Init()
 
-	case "Install service", "Uninstall service":
-		content := "This action is not yet available in the TUI.\n" +
-			"Use the command directly:\n\n" +
-			"  mcp-wire install <service>\n" +
-			"  mcp-wire uninstall <service>\n"
-		m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
-		return m, m.screen.Init()
+	case "Install service":
+		return m.startWizard("install")
+
+	case "Uninstall service":
+		return m.startWizard("uninstall")
 	}
 
 	return m, nil
+}
+
+func (m WizardModel) startWizard(action string) (tea.Model, tea.Cmd) {
+	m.state = WizardState{Action: action}
+
+	if m.callbacks.RegistryEnabled {
+		m.screen = NewSourceScreen(m.theme)
+		m.steps = []BreadcrumbStep{
+			{Label: "Source", Active: true, Visible: true},
+		}
+		return m, m.screen.Init()
+	}
+
+	// Registry disabled — default to curated, skip source screen.
+	m.state.Source = "curated"
+	return m.showServicePlaceholder()
+}
+
+func (m WizardModel) handleSourceSelect(msg sourceSelectMsg) (tea.Model, tea.Cmd) {
+	m.state.Source = msg.source
+	return m.showServicePlaceholder()
+}
+
+// showServicePlaceholder shows a placeholder for the service selection screen
+// (to be replaced in step 8.3).
+func (m WizardModel) showServicePlaceholder() (tea.Model, tea.Cmd) {
+	m.steps = sourceCompletedSteps(m.state.Source)
+	content := "Service selection is not yet available in the TUI.\n" +
+		"Use the command directly:\n\n" +
+		"  mcp-wire " + m.state.Action + " <service>\n"
+	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
+	return m, m.screen.Init()
+}
+
+// sourceCompletedSteps returns breadcrumb steps with Source completed.
+func sourceCompletedSteps(source string) []BreadcrumbStep {
+	labels := map[string]string{
+		"curated":  "Curated",
+		"registry": "Registry",
+		"all":      "Both",
+	}
+
+	return []BreadcrumbStep{
+		{Label: "Source", Value: labels[source], Completed: true, Visible: true},
+	}
 }
 
 // renderToOutput runs a callback, captures its output, and returns an

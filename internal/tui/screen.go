@@ -42,3 +42,8 @@ type BackMsg struct{}
 type menuSelectMsg struct {
 	item string
 }
+
+// sourceSelectMsg is sent when a source is selected.
+type sourceSelectMsg struct {
+	source string // "curated", "registry", "all"
+}

@@ -156,19 +156,22 @@ func TestWizardModel_NilCallback(t *testing.T) {
 	assert.Contains(t, wm.screen.View(), "not available")
 }
 
-func TestWizardModel_InstallShowsPlaceholder(t *testing.T) {
+func TestWizardModel_InstallNoRegistry_SkipsSource(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
 	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
 	wm := updated.(WizardModel)
 
+	// Without registry, source screen is skipped.
 	_, isOutput := wm.screen.(*OutputScreen)
 	assert.True(t, isOutput)
+	assert.Equal(t, "install", wm.state.Action)
+	assert.Equal(t, "curated", wm.state.Source)
 	assert.Contains(t, wm.screen.View(), "mcp-wire install")
 }
 
-func TestWizardModel_UninstallShowsPlaceholder(t *testing.T) {
+func TestWizardModel_UninstallNoRegistry_SkipsSource(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
@@ -177,7 +180,104 @@ func TestWizardModel_UninstallShowsPlaceholder(t *testing.T) {
 
 	_, isOutput := wm.screen.(*OutputScreen)
 	assert.True(t, isOutput)
+	assert.Equal(t, "uninstall", wm.state.Action)
+	assert.Equal(t, "curated", wm.state.Source)
 	assert.Contains(t, wm.screen.View(), "mcp-wire uninstall")
+}
+
+func testCallbacksWithRegistry() Callbacks {
+	cb := testCallbacks()
+	cb.RegistryEnabled = true
+	return cb
+}
+
+func TestWizardModel_InstallWithRegistry_ShowsSource(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	_, isSource := wm.screen.(*SourceScreen)
+	assert.True(t, isSource)
+	assert.Equal(t, "install", wm.state.Action)
+	assert.Empty(t, wm.state.Source)
+}
+
+func TestWizardModel_UninstallWithRegistry_ShowsSource(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	_, isSource := wm.screen.(*SourceScreen)
+	assert.True(t, isSource)
+	assert.Equal(t, "uninstall", wm.state.Action)
+}
+
+func TestWizardModel_SourceBreadcrumb(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.width = 80
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	require.Len(t, wm.steps, 1)
+	assert.Equal(t, "Source", wm.steps[0].Label)
+	assert.True(t, wm.steps[0].Active)
+}
+
+func TestWizardModel_SourceSelectStoresState(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to source screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	// Select "registry" source.
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	assert.Equal(t, "registry", wm.state.Source)
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+}
+
+func TestWizardModel_SourceSelectBreadcrumbCompleted(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	updated, _ = wm.Update(sourceSelectMsg{source: "all"})
+	wm = updated.(WizardModel)
+
+	require.Len(t, wm.steps, 1)
+	assert.True(t, wm.steps[0].Completed)
+	assert.Equal(t, "Both", wm.steps[0].Value)
+}
+
+func TestWizardModel_BackFromSourceResetsState(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to source screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	assert.Equal(t, "install", wm.state.Action)
+
+	// Back resets state and returns to menu.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isMenu := wm.screen.(*MenuScreen)
+	assert.True(t, isMenu)
+	assert.Empty(t, wm.state.Action)
+	assert.Nil(t, wm.steps)
 }
 
 func TestWizardModel_BackFromOutputReturnsToMenu(t *testing.T) {

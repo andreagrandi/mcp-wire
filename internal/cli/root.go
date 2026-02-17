@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/andreagrandi/mcp-wire/internal/app"
+	"github.com/andreagrandi/mcp-wire/internal/config"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/andreagrandi/mcp-wire/internal/tui"
 	"github.com/spf13/cobra"
@@ -48,7 +49,7 @@ func runGuidedMainMenu(cmd *cobra.Command) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
 		cfg, err := loadConfig()
 		if err == nil && cfg.IsFeatureEnabled("tui") {
-			return tui.Run(tuiCallbacks(), app.Version)
+			return tui.Run(tuiCallbacks(cfg), app.Version)
 		}
 
 		return runGuidedMainMenuSurvey(cmd)
@@ -115,7 +116,7 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 	}
 }
 
-func tuiCallbacks() tui.Callbacks {
+func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 	return tui.Callbacks{
 		RenderStatus: func(w io.Writer) error {
 			return runStatusFlow(w, targetpkg.ConfigScopeEffective)
@@ -133,6 +134,7 @@ func tuiCallbacks() tui.Callbacks {
 			printTargetsList(w, allTargets())
 			return nil
 		},
+		RegistryEnabled: cfg.IsFeatureEnabled("registry"),
 	}
 }
 
