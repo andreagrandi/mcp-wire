@@ -13,6 +13,8 @@ make fmt                # Format code
 make build-all          # Cross-compile (linux, darwin amd64/arm64, windows)
 ```
 
+Always format the code with gofmt before commit and push
+
 ## Architecture
 
 mcp-wire is a CLI tool that installs MCP (Model Context Protocol) servers across multiple AI coding tools from a single interface. Two independent dimensions:
