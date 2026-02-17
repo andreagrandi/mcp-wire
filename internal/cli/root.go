@@ -144,6 +144,7 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 		},
 		RefreshRegistryEntry:  refreshRegistryEntry,
 		CatalogEntryToService: catalogEntryToService,
+		AllTargets:            allTargets,
 		RegistryEnabled:       registryEnabled,
 	}
 }

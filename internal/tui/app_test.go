@@ -12,7 +12,26 @@ import (
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
+
+func testMockTargets() []targetpkg.Target {
+	return []targetpkg.Target{
+		&mockTarget{name: "Claude Code", slug: "claude", installed: true},
+		&mockTarget{name: "Codex", slug: "codex", installed: true},
+		&mockTarget{name: "Gemini CLI", slug: "geminicli", installed: false},
+	}
+}
+
+func testMockTargetsWithScopes() []targetpkg.Target {
+	return []targetpkg.Target{
+		&mockTarget{
+			name: "Claude Code", slug: "claude", installed: true,
+			scopes: []targetpkg.ConfigScope{targetpkg.ConfigScopeUser, targetpkg.ConfigScopeProject},
+		},
+		&mockTarget{name: "Codex", slug: "codex", installed: true},
+	}
+}
 
 func testCallbacks() Callbacks {
 	return Callbacks{
@@ -28,6 +47,7 @@ func testCallbacks() Callbacks {
 			_, err := w.Write([]byte("Targets output"))
 			return err
 		},
+		AllTargets: testMockTargets,
 	}
 }
 
@@ -278,7 +298,7 @@ func TestWizardModel_ServiceBreadcrumbNoRegistry(t *testing.T) {
 	assert.Equal(t, "Service", wm.steps[0].Label)
 }
 
-func TestWizardModel_ServiceSelectShowsPlaceholder(t *testing.T) {
+func TestWizardModel_ServiceSelectShowsTargetScreen(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
@@ -292,9 +312,8 @@ func TestWizardModel_ServiceSelectShowsPlaceholder(t *testing.T) {
 	wm = updated.(WizardModel)
 
 	assert.Equal(t, "sentry", wm.state.Entry.Name)
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "mcp-wire install sentry")
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 }
 
 func TestWizardModel_ServiceSelectBreadcrumb(t *testing.T) {
@@ -307,16 +326,18 @@ func TestWizardModel_ServiceSelectBreadcrumb(t *testing.T) {
 	updated, _ = wm.Update(sourceSelectMsg{source: "curated"})
 	wm = updated.(WizardModel)
 
-	// Select service.
+	// Select service → goes to target screen.
 	entry := catalog.FromCurated(service.Service{Name: "sentry"})
 	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
-	require.Len(t, wm.steps, 2)
+	require.Len(t, wm.steps, 3)
 	assert.True(t, wm.steps[0].Completed)
 	assert.Equal(t, "Curated", wm.steps[0].Value)
 	assert.True(t, wm.steps[1].Completed)
 	assert.Equal(t, "sentry", wm.steps[1].Value)
+	assert.True(t, wm.steps[2].Active)
+	assert.Equal(t, "Targets", wm.steps[2].Label)
 }
 
 func TestWizardModel_BackFromSourceResetsState(t *testing.T) {
@@ -483,16 +504,16 @@ func TestWizardModel_CuratedServiceSkipsTrustScreen(t *testing.T) {
 	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
 	wm := updated.(WizardModel)
 
-	// Select a curated entry — should skip trust and go to placeholder.
+	// Select a curated entry — should skip trust and go to target screen.
 	entry := catalog.FromCurated(service.Service{Name: "sentry"})
 	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 }
 
-func TestWizardModel_TrustConfirmYesShowsPlaceholder(t *testing.T) {
+func TestWizardModel_TrustConfirmYesShowsTargetScreen(t *testing.T) {
 	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
 	model.height = 20
 
@@ -516,9 +537,8 @@ func TestWizardModel_TrustConfirmYesShowsPlaceholder(t *testing.T) {
 	updated, _ = wm.Update(trustConfirmMsg{confirmed: true})
 	wm = updated.(WizardModel)
 
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "mcp-wire install community-svc")
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 }
 
 func TestWizardModel_TrustConfirmNoGoesBackToService(t *testing.T) {
@@ -711,4 +731,273 @@ func splitLines(s string) []string {
 
 	lines = append(lines, s[start:])
 	return lines
+}
+
+// --- Target and scope screen integration tests ---
+
+func testCallbacksWithTargets(targets []targetpkg.Target) Callbacks {
+	cb := testCallbacks()
+	cb.AllTargets = func() []targetpkg.Target { return targets }
+	return cb
+}
+
+func TestWizardModel_TargetScreenBreadcrumb(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Navigate to target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Should be on target screen with breadcrumb.
+	_, isTarget := wm.screen.(*TargetScreen)
+	require.True(t, isTarget)
+
+	// Breadcrumb: Service ✓ › Targets (active)
+	require.Len(t, wm.steps, 2)
+	assert.True(t, wm.steps[0].Completed)
+	assert.Equal(t, "sentry", wm.steps[0].Value)
+	assert.True(t, wm.steps[1].Active)
+	assert.Equal(t, "Targets", wm.steps[1].Label)
+}
+
+func TestWizardModel_TargetSelectNoScopeGoesToReview(t *testing.T) {
+	// Targets without scope support → skip scope screen.
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Navigate to target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Select targets (no scope support).
+	targets := testMockTargets()[:2] // claude and codex, no scope support
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Should skip scope and go to review placeholder.
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Equal(t, targetpkg.ConfigScopeUser, wm.state.Scope)
+	assert.Len(t, wm.state.Targets, 2)
+}
+
+func TestWizardModel_TargetSelectWithScopeShowsScopeScreen(t *testing.T) {
+	cb := testCallbacksWithTargets(testMockTargetsWithScopes())
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate to target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Select targets that support scopes.
+	updated, _ = wm.Update(targetSelectMsg{targets: testMockTargetsWithScopes()})
+	wm = updated.(WizardModel)
+
+	_, isScope := wm.screen.(*ScopeScreen)
+	assert.True(t, isScope)
+}
+
+func TestWizardModel_ScopeBreadcrumb(t *testing.T) {
+	cb := testCallbacksWithTargets(testMockTargetsWithScopes())
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate through to scope screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(targetSelectMsg{targets: testMockTargetsWithScopes()})
+	wm = updated.(WizardModel)
+
+	// Breadcrumb: Service ✓ › Targets ✓ › Scope (active)
+	require.Len(t, wm.steps, 3)
+	assert.True(t, wm.steps[0].Completed)
+	assert.Equal(t, "sentry", wm.steps[0].Value)
+	assert.True(t, wm.steps[1].Completed)
+	assert.Equal(t, "Targets", wm.steps[1].Label)
+	assert.NotEmpty(t, wm.steps[1].Value)
+	assert.True(t, wm.steps[2].Active)
+	assert.Equal(t, "Scope", wm.steps[2].Label)
+}
+
+func TestWizardModel_ScopeSelectGoesToReview(t *testing.T) {
+	cb := testCallbacksWithTargets(testMockTargetsWithScopes())
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate through to scope screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(targetSelectMsg{targets: testMockTargetsWithScopes()})
+	wm = updated.(WizardModel)
+
+	// Select project scope.
+	updated, _ = wm.Update(scopeSelectMsg{scope: targetpkg.ConfigScopeProject})
+	wm = updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Equal(t, targetpkg.ConfigScopeProject, wm.state.Scope)
+}
+
+func TestWizardModel_BackFromTargetGoesToService(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Navigate to target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	_, isTarget := wm.screen.(*TargetScreen)
+	require.True(t, isTarget)
+
+	// Back from target goes to service.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
+	assert.Empty(t, wm.state.Entry.Name)
+	assert.Nil(t, wm.state.Targets)
+}
+
+func TestWizardModel_BackFromScopeGoesToTarget(t *testing.T) {
+	cb := testCallbacksWithTargets(testMockTargetsWithScopes())
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate through to scope screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargetsWithScopes()
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	_, isScope := wm.screen.(*ScopeScreen)
+	require.True(t, isScope)
+
+	// Back from scope goes to target screen.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
+
+	// Targets should be preserved for re-selection.
+	assert.Len(t, wm.state.Targets, len(targets))
+}
+
+func TestWizardModel_TargetSummary(t *testing.T) {
+	targets := testMockTargets()
+
+	assert.Equal(t, "", targetSummary(nil))
+	assert.Equal(t, "Claude Code", targetSummary(targets[:1]))
+	assert.Equal(t, "Claude Code +1", targetSummary(targets[:2]))
+	assert.Equal(t, "Claude Code +2", targetSummary(targets[:3]))
+}
+
+func TestWizardModel_AnyTargetSupportsProjectScope(t *testing.T) {
+	assert.False(t, anyTargetSupportsProjectScope(testMockTargets()))
+	assert.True(t, anyTargetSupportsProjectScope(testMockTargetsWithScopes()))
+	assert.False(t, anyTargetSupportsProjectScope(nil))
+}
+
+func TestWizardModel_ReviewBreadcrumbNoScope(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Full flow without scope.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:2]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Review placeholder: Service ✓, Targets ✓ (no scope step).
+	require.Len(t, wm.steps, 2)
+	assert.True(t, wm.steps[0].Completed)
+	assert.True(t, wm.steps[1].Completed)
+}
+
+func TestWizardModel_ReviewBreadcrumbWithProjectScope(t *testing.T) {
+	cb := testCallbacksWithTargets(testMockTargetsWithScopes())
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Full flow with scope.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(targetSelectMsg{targets: testMockTargetsWithScopes()})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(scopeSelectMsg{scope: targetpkg.ConfigScopeProject})
+	wm = updated.(WizardModel)
+
+	// Review placeholder: Service ✓, Targets ✓, Scope ✓.
+	require.Len(t, wm.steps, 3)
+	assert.True(t, wm.steps[0].Completed)
+	assert.True(t, wm.steps[1].Completed)
+	assert.True(t, wm.steps[2].Completed)
+	assert.Equal(t, "project", wm.steps[2].Value)
+}
+
+func TestWizardModel_NilAllTargetsCallback(t *testing.T) {
+	cb := testCallbacks()
+	cb.AllTargets = nil
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Navigate to target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Should show target screen with empty list.
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 }

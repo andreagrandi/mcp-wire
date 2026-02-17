@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"strings"
 
@@ -9,6 +10,7 @@ import (
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/service"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
 
 // Callbacks provides functions that generate output for display in the TUI
@@ -21,14 +23,17 @@ type Callbacks struct {
 	RegistrySyncStatus    func() string
 	RefreshRegistryEntry  func(catalog.Entry) catalog.Entry
 	CatalogEntryToService func(catalog.Entry) (service.Service, bool)
+	AllTargets            func() []targetpkg.Target
 	RegistryEnabled       bool
 }
 
 // WizardState holds the accumulated selections across wizard screens.
 type WizardState struct {
-	Action string        // "install" or "uninstall"
-	Source string        // "curated", "registry", "all"
-	Entry  catalog.Entry // selected service
+	Action  string                // "install" or "uninstall"
+	Source  string                // "curated", "registry", "all"
+	Entry   catalog.Entry         // selected service
+	Targets []targetpkg.Target    // selected targets
+	Scope   targetpkg.ConfigScope // "user" or "project"
 }
 
 // WizardModel is the root Bubble Tea model for the full-screen TUI.
@@ -81,6 +86,12 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case trustConfirmMsg:
 		return m.handleTrustConfirm(msg)
+
+	case targetSelectMsg:
+		return m.handleTargetSelect(msg)
+
+	case scopeSelectMsg:
+		return m.handleScopeSelect(msg)
 
 	case BackMsg:
 		return m.handleBack()
@@ -205,7 +216,7 @@ func (m WizardModel) handleServiceSelect(msg serviceSelectMsg) (tea.Model, tea.C
 		return m.showTrustScreen()
 	}
 
-	return m.showTargetPlaceholder()
+	return m.showTargetScreen()
 }
 
 func (m WizardModel) handleTrustConfirm(msg trustConfirmMsg) (tea.Model, tea.Cmd) {
@@ -219,7 +230,7 @@ func (m WizardModel) handleTrustConfirm(msg trustConfirmMsg) (tea.Model, tea.Cmd
 		m.state.Entry = m.callbacks.RefreshRegistryEntry(m.state.Entry)
 	}
 
-	return m.showTargetPlaceholder()
+	return m.showTargetScreen()
 }
 
 func (m WizardModel) showTrustScreen() (tea.Model, tea.Cmd) {
@@ -242,9 +253,7 @@ func (m WizardModel) showTrustScreen() (tea.Model, tea.Cmd) {
 	return m, m.screen.Init()
 }
 
-// showTargetPlaceholder shows a placeholder for the target selection screen
-// (to be replaced in step 8.5).
-func (m WizardModel) showTargetPlaceholder() (tea.Model, tea.Cmd) {
+func (m WizardModel) showTargetScreen() (tea.Model, tea.Cmd) {
 	var steps []BreadcrumbStep
 	if m.callbacks.RegistryEnabled {
 		steps = append(steps, BreadcrumbStep{
@@ -256,16 +265,135 @@ func (m WizardModel) showTargetPlaceholder() (tea.Model, tea.Cmd) {
 		Label: "Service", Value: m.state.Entry.Name,
 		Completed: true, Visible: true,
 	})
+	steps = append(steps, BreadcrumbStep{
+		Label: "Targets", Active: true, Visible: true,
+	})
 	m.steps = steps
-	content := "Target selection is not yet available in the TUI.\n" +
+
+	var allTargets []targetpkg.Target
+	if m.callbacks.AllTargets != nil {
+		allTargets = m.callbacks.AllTargets()
+	}
+
+	m.screen = NewTargetScreen(m.theme, allTargets, m.state.Targets)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleTargetSelect(msg targetSelectMsg) (tea.Model, tea.Cmd) {
+	m.state.Targets = msg.targets
+
+	if anyTargetSupportsProjectScope(msg.targets) {
+		return m.showScopeScreen()
+	}
+
+	// No scope selection needed — default to user scope.
+	m.state.Scope = targetpkg.ConfigScopeUser
+	return m.showReviewPlaceholder()
+}
+
+func (m WizardModel) showScopeScreen() (tea.Model, tea.Cmd) {
+	var steps []BreadcrumbStep
+	if m.callbacks.RegistryEnabled {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Source", Value: sourceValueLabel(m.state.Source),
+			Completed: true, Visible: true,
+		})
+	}
+	steps = append(steps, BreadcrumbStep{
+		Label: "Service", Value: m.state.Entry.Name,
+		Completed: true, Visible: true,
+	})
+	steps = append(steps, BreadcrumbStep{
+		Label: "Targets", Value: targetSummary(m.state.Targets),
+		Completed: true, Visible: true,
+	})
+	steps = append(steps, BreadcrumbStep{
+		Label: "Scope", Active: true, Visible: true,
+	})
+	m.steps = steps
+	m.screen = NewScopeScreen(m.theme)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleScopeSelect(msg scopeSelectMsg) (tea.Model, tea.Cmd) {
+	m.state.Scope = msg.scope
+	return m.showReviewPlaceholder()
+}
+
+// showReviewPlaceholder shows a placeholder for the review screen
+// (to be replaced in step 8.6).
+func (m WizardModel) showReviewPlaceholder() (tea.Model, tea.Cmd) {
+	var steps []BreadcrumbStep
+	if m.callbacks.RegistryEnabled {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Source", Value: sourceValueLabel(m.state.Source),
+			Completed: true, Visible: true,
+		})
+	}
+	steps = append(steps, BreadcrumbStep{
+		Label: "Service", Value: m.state.Entry.Name,
+		Completed: true, Visible: true,
+	})
+	steps = append(steps, BreadcrumbStep{
+		Label: "Targets", Value: targetSummary(m.state.Targets),
+		Completed: true, Visible: true,
+	})
+	if m.state.Scope == targetpkg.ConfigScopeProject {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Scope", Value: "project",
+			Completed: true, Visible: true,
+		})
+	}
+	m.steps = steps
+
+	content := "Review/Apply is not yet available in the TUI.\n" +
 		"Use the command directly:\n\n" +
 		"  mcp-wire " + m.state.Action + " " + m.state.Entry.Name + "\n"
 	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
 	return m, m.screen.Init()
 }
 
+// targetSummary returns a short label for the selected targets.
+func targetSummary(targets []targetpkg.Target) string {
+	if len(targets) == 0 {
+		return ""
+	}
+	if len(targets) == 1 {
+		return targets[0].Name()
+	}
+	return targets[0].Name() + " +" + fmt.Sprintf("%d", len(targets)-1)
+}
+
+// anyTargetSupportsProjectScope checks if any of the given targets support
+// the project config scope.
+func anyTargetSupportsProjectScope(targets []targetpkg.Target) bool {
+	for _, t := range targets {
+		st, ok := t.(targetpkg.ScopedTarget)
+		if !ok {
+			continue
+		}
+		for _, s := range st.SupportedScopes() {
+			if s == targetpkg.ConfigScopeProject {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen.(type) {
+	case *ScopeScreen:
+		// Back from scope goes to target selection, preserving selections.
+		return m.showTargetScreen()
+
+	case *TargetScreen:
+		// Back from target goes to service selection.
+		m.state.Targets = nil
+		m.state.Scope = ""
+		m.state.Entry = catalog.Entry{}
+		return m.showServiceScreen()
+
 	case *TrustScreen:
 		// Back from trust goes to service selection.
 		m.state.Entry = catalog.Entry{}

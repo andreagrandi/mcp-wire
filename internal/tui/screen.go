@@ -4,6 +4,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
 
 // ScreenID identifies a wizard screen.
@@ -55,4 +56,14 @@ type sourceSelectMsg struct {
 // serviceSelectMsg is sent when a service is selected.
 type serviceSelectMsg struct {
 	entry catalog.Entry
+}
+
+// targetSelectMsg is sent when target(s) are confirmed.
+type targetSelectMsg struct {
+	targets []targetpkg.Target
+}
+
+// scopeSelectMsg is sent when a scope is selected.
+type scopeSelectMsg struct {
+	scope targetpkg.ConfigScope
 }

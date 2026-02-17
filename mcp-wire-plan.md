@@ -892,7 +892,7 @@ Shown after selecting a non-curated service. Displays service metadata (source, 
 
 Acceptance: Registry service → trust shown. Curated service → skipped.
 
-### 8.5 — Target Multi-select + Scope (Screens 5, 5b)
+### 8.5 — Target Multi-select + Scope (Screens 5, 5b) ✅
 
 Target screen:
 
