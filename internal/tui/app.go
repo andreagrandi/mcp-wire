@@ -93,6 +93,9 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case scopeSelectMsg:
 		return m.handleScopeSelect(msg)
 
+	case reviewConfirmMsg:
+		return m.handleReviewConfirm(msg)
+
 	case BackMsg:
 		return m.handleBack()
 	}
@@ -288,7 +291,7 @@ func (m WizardModel) handleTargetSelect(msg targetSelectMsg) (tea.Model, tea.Cmd
 
 	// No scope selection needed — default to user scope.
 	m.state.Scope = targetpkg.ConfigScopeUser
-	return m.showReviewPlaceholder()
+	return m.showReviewScreen()
 }
 
 func (m WizardModel) showScopeScreen() (tea.Model, tea.Cmd) {
@@ -317,12 +320,47 @@ func (m WizardModel) showScopeScreen() (tea.Model, tea.Cmd) {
 
 func (m WizardModel) handleScopeSelect(msg scopeSelectMsg) (tea.Model, tea.Cmd) {
 	m.state.Scope = msg.scope
-	return m.showReviewPlaceholder()
+	return m.showReviewScreen()
 }
 
-// showReviewPlaceholder shows a placeholder for the review screen
-// (to be replaced in step 8.6).
-func (m WizardModel) showReviewPlaceholder() (tea.Model, tea.Cmd) {
+func (m WizardModel) showReviewScreen() (tea.Model, tea.Cmd) {
+	m.steps = m.reviewBreadcrumbs()
+	m.screen = NewReviewScreen(m.theme, m.state, m.callbacks.RegistryEnabled)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleReviewConfirm(msg reviewConfirmMsg) (tea.Model, tea.Cmd) {
+	if !msg.confirmed {
+		return m.reviewGoBack()
+	}
+
+	return m.showApplyPlaceholder()
+}
+
+// reviewGoBack navigates back from the review screen to the previous step.
+func (m WizardModel) reviewGoBack() (tea.Model, tea.Cmd) {
+	if anyTargetSupportsProjectScope(m.state.Targets) {
+		m.state.Scope = ""
+		return m.showScopeScreen()
+	}
+
+	return m.showTargetScreen()
+}
+
+// showApplyPlaceholder shows a placeholder for the apply screen
+// (to be replaced in step 8.7).
+func (m WizardModel) showApplyPlaceholder() (tea.Model, tea.Cmd) {
+	m.steps = m.reviewBreadcrumbs()
+
+	content := "Apply is not yet available in the TUI.\n" +
+		"Use the command directly:\n\n" +
+		"  mcp-wire " + m.state.Action + " " + m.state.Entry.Name + "\n"
+	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
+	return m, m.screen.Init()
+}
+
+// reviewBreadcrumbs builds the breadcrumb steps for the review screen.
+func (m WizardModel) reviewBreadcrumbs() []BreadcrumbStep {
 	var steps []BreadcrumbStep
 	if m.callbacks.RegistryEnabled {
 		steps = append(steps, BreadcrumbStep{
@@ -344,13 +382,7 @@ func (m WizardModel) showReviewPlaceholder() (tea.Model, tea.Cmd) {
 			Completed: true, Visible: true,
 		})
 	}
-	m.steps = steps
-
-	content := "Review/Apply is not yet available in the TUI.\n" +
-		"Use the command directly:\n\n" +
-		"  mcp-wire " + m.state.Action + " " + m.state.Entry.Name + "\n"
-	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
-	return m, m.screen.Init()
+	return steps
 }
 
 // targetSummary returns a short label for the selected targets.
@@ -383,6 +415,9 @@ func anyTargetSupportsProjectScope(targets []targetpkg.Target) bool {
 
 func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen.(type) {
+	case *ReviewScreen:
+		return m.reviewGoBack()
+
 	case *ScopeScreen:
 		// Back from scope goes to target selection, preserving selections.
 		return m.showTargetScreen()

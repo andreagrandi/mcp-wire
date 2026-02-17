@@ -906,7 +906,7 @@ Scope screen:
 
 Acceptance: Full flow from source → service → target → scope works.
 
-### 8.6 — Review (Screen 6)
+### 8.6 — Review (Screen 6) ✅
 
 Summary of all selections: Source, Service, Targets, Scope, Credentials mode. Shows equivalent CLI command (reuse `buildEquivalentInstallCommand` logic from `guided.go`). Horizontal Apply/Cancel choice.
 
