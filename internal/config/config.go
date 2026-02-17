@@ -22,6 +22,11 @@ var FeatureRegistry = map[string]FeatureDefinition{
 		Description: "Official MCP Registry integration",
 		Default:     false,
 	},
+	"tui": {
+		Name:        "tui",
+		Description: "Full-screen Bubble Tea terminal UI",
+		Default:     false,
+	},
 }
 
 // FeatureDefinition describes a feature flag.

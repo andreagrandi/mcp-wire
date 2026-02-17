@@ -9,6 +9,7 @@ import (
 
 	"github.com/andreagrandi/mcp-wire/internal/app"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
+	"github.com/andreagrandi/mcp-wire/internal/tui"
 	"github.com/spf13/cobra"
 )
 
@@ -45,6 +46,11 @@ func isCacheCommand(args []string) bool {
 
 func runGuidedMainMenu(cmd *cobra.Command) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
+		cfg, err := loadConfig()
+		if err == nil && cfg.IsFeatureEnabled("tui") {
+			return tui.Run()
+		}
+
 		return runGuidedMainMenuSurvey(cmd)
 	}
 
