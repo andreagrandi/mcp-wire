@@ -774,6 +774,202 @@ Suggested order for shipping gradually:
 
 ---
 
+## Phase 8: TUI Redesign — Bubble Tea Full-Screen UI
+
+Replace the `survey/v2`-based interactive UI with a full-screen Bubble Tea TUI featuring breadcrumb navigation, fixed-height content area, live-filtered search, multi-select checkboxes, and progress indicators. The plain-text fallback (`guided.go`) and explicit CLI mode (`mcp-wire install sentry --target claude`) remain unchanged.
+
+### Architecture
+
+**Wizard state machine with composable screens.** A single root Bubble Tea model owns the layout shell (title bar, breadcrumb, status bar) and delegates 13-15 content lines to the active screen sub-model. Each screen implements a `Screen` interface. Navigation via message passing (`NavigateMsg`, `BackMsg`). A screen stack enables Esc-back.
+
+New package structure:
+
+```
+internal/tui/
+    app.go              -- Root model (state machine, layout shell)
+    theme.go            -- Lip Gloss styles, color palette, layout constants
+    screen.go           -- Screen interface, message types, ScreenID enum
+    breadcrumb.go       -- Breadcrumb bar renderer
+    statusbar.go        -- Bottom status bar renderer
+    menu.go             -- Screen 1: Main Menu
+    source.go           -- Screen 2: Source Selection
+    service.go          -- Screen 3: Service Selection (with search)
+    trust.go            -- Screen 4: Registry Trust Warning
+    target.go           -- Screen 5: Target Multi-select
+    scope.go            -- Screen 5b: Scope Selection
+    review.go           -- Screen 6: Review
+    apply.go            -- Screen 7: Apply (progress/result)
+    credential.go       -- Credential prompting within TUI
+```
+
+Each file gets a corresponding `_test.go`.
+
+Key types:
+
+```go
+type Screen interface {
+    Init() tea.Cmd
+    Update(msg tea.Msg) (Screen, tea.Cmd)
+    View() string
+    StatusHints() []KeyHint
+}
+
+type WizardState struct {
+    Action  string              // "install" or "uninstall"
+    Source  string              // "curated", "registry", "all"
+    Service service.Service
+    Entry   *catalog.Entry
+    Targets []target.Target
+    Scope   target.ConfigScope
+    Results []TargetResult
+}
+```
+
+New dependencies:
+
+```
+github.com/charmbracelet/bubbletea  v1.x
+github.com/charmbracelet/lipgloss   v1.x
+github.com/charmbracelet/bubbles    v0.x
+```
+
+After completion, `AlecAivazis/survey/v2` and its transitive deps are removed.
+
+### 8.0 — Foundation (dependencies and layout shell)
+
+Add Bubble Tea, Lip Gloss, and Bubbles to `go.mod`. Create the package skeleton with the root model, theme, and a placeholder main-menu screen. Wire into `root.go` alongside the existing dispatch logic, guarded by a feature flag so the old survey path remains reachable during development.
+
+Create:
+
+- `internal/tui/app.go` — Root `WizardModel` (tea.Model). Owns terminal dimensions, renders layout frame (title row, breadcrumb, content, status bar). Delegates to active `Screen`.
+- `internal/tui/screen.go` — `Screen` interface, `ScreenID` enum, navigation message types.
+- `internal/tui/theme.go` — `Theme` struct with Lip Gloss styles matching mockup palette (cyan active, green completed, dim future, yellow warning, red error). Layout constant: `ContentHeight = 13`.
+- `internal/tui/breadcrumb.go` — Renders from `WizardState`. Completed = green ✓ + value. Active = bold cyan. Future = dim.
+- `internal/tui/statusbar.go` — Renders `[]KeyHint` on bottom row.
+- `internal/tui/menu.go` — Placeholder main menu.
+
+Modify:
+
+- `go.mod` / `go.sum` — Add bubbletea, lipgloss, bubbles.
+- `internal/cli/root.go` — Add TUI branch in `runGuidedMainMenu()`, guarded by feature flag.
+
+Acceptance: `make test` passes. `bin/mcp-wire` shows the Bubble Tea menu.
+
+### 8.1 — Main Menu (Screen 1)
+
+Full menu with ↑↓ navigation, Enter select, q quit. Non-TUI actions (Status, List services, List targets) captured into an output viewer screen that displays pre-rendered text with "press any key to return".
+
+Acceptance: Menu navigable. Status/List output renders in TUI. Exit quits cleanly.
+
+### 8.2 — Source Selection (Screen 2)
+
+Conditional on registry feature flag. Three options with inline descriptions: Curated (recommended), Registry, Both.
+
+Modify `internal/tui/app.go` to skip source screen when registry feature is off, defaulting to "curated".
+
+Acceptance: With registry enabled → source screen shown. Without → skipped directly to service selection.
+
+### 8.3 — Service Selection (Screen 3) — hardest screen
+
+Live-filtered search over curated and/or registry catalog.
+
+- Uses Bubbles `textinput.Model` for search bar.
+- `allEntries`, `filtered`, `cursor`, `offset` for scroll state.
+- Right-aligned count ("786 services" / "2 matches").
+- Two-line entries: name + description.
+- Scroll indicator ("▼ N more").
+- `Init()` loads catalog via existing `loadCatalog()` from `catalog_helpers.go`.
+- Registry sync: poll `registrySyncStatusLine()` via `tea.Tick` every 500ms (replaces the blocking `waitForRegistrySyncInSurvey`).
+
+Acceptance: Search filters live. Scroll works. Enter selects.
+
+### 8.4 — Registry Trust Warning (Screen 4)
+
+Shown after selecting a non-curated service. Displays service metadata (source, transport, URL, repo) and horizontal Yes/No choice.
+
+- On "Yes": fetch latest via `refreshRegistryEntry()`, convert via `catalogEntryToService()`, proceed to targets.
+- On "No": back to service list.
+
+Acceptance: Registry service → trust shown. Curated service → skipped.
+
+### 8.5 — Target Multi-select + Scope (Screens 5, 5b)
+
+Target screen:
+
+- `[x]`/`[ ]` checkboxes. Space toggles, `a` all installed, `n` none.
+- Not-installed targets dimmed and non-selectable.
+- Enter confirms (≥1 required).
+
+Scope screen:
+
+- User/Project choice. Only shown if any selected target supports project scope.
+
+Acceptance: Full flow from source → service → target → scope works.
+
+### 8.6 — Review (Screen 6)
+
+Summary of all selections: Source, Service, Targets, Scope, Credentials mode. Shows equivalent CLI command (reuse `buildEquivalentInstallCommand` logic from `guided.go`). Horizontal Apply/Cancel choice.
+
+Acceptance: Review shows correct summary. Apply proceeds to execution.
+
+### 8.7 — Apply + Credentials (Screen 7) — second hardest
+
+Credential prompting in TUI:
+
+- `CredentialScreen` steps through unresolved `EnvVar` entries sequentially.
+- Uses `textinput.Model` with `EchoMode = EchoNone` for secrets.
+- Shows setup URL/hint before each prompt.
+- On completion, stores resolved values and proceeds to apply.
+
+Apply screen:
+
+- Per-target status rows: `◌` pending, `◌` configuring, `✓` done, `✗` failed.
+- Runs each `target.Install()` via `tea.Cmd` (goroutine), receives progress messages.
+- Success: green display + equivalent command + "Install another / Back to menu / Exit".
+- Partial failure: warning + error details + "Retry failed / Back to menu / Exit".
+- OAuth: runs `Authenticate()` in a `tea.Cmd`, shows "authenticating..." status.
+
+Modify `internal/cli/install.go` — extract `installSingleTarget()` from `executeInstall()` loop so both CLI and TUI paths can call it.
+
+Acceptance: Full end-to-end install with credential prompting and per-target progress.
+
+### 8.8 — Uninstall Flow
+
+Reuses most install screens. `WizardState.Action = "uninstall"` controls rendering and business logic differences in Review and Apply screens. Add post-uninstall credential removal prompt (mirrors `maybeRemoveStoredCredentials` from `uninstall.go`).
+
+Acceptance: Full uninstall flow works end-to-end in the TUI.
+
+### 8.9 — Cleanup and Survey Removal
+
+Remove survey dependency and transition code.
+
+Delete:
+
+- `internal/cli/survey_ui.go`
+- `internal/cli/survey_escape_input.go`
+- `internal/cli/survey_escape_input_unix.go`
+- `internal/cli/survey_escape_input_other.go`
+- `internal/cli/survey_escape_input_test.go`
+
+Modify:
+
+- `internal/cli/root.go` — Remove survey branch and feature-flag guard. TTY → TUI, non-TTY → plain text.
+- `go.mod` — Remove `AlecAivazis/survey/v2` and transitive deps.
+
+Acceptance: `make test` passes. `survey` gone from `go.mod`. TUI, plain-text, and CLI flag modes all work.
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|------|-----------|
+| Credential prompting in Bubble Tea | Use Bubbles `textinput` with `EchoNone` — hidden input native to the event loop. `term.ReadPassword` stays in `install_credentials.go` for plain-text fallback only. |
+| Registry sync blocking | Replace `waitForRegistrySyncInSurvey()` with `tea.Tick` polling of `registrySyncStatusLine()`. Sync already runs in a background goroutine. |
+| OAuth subprocess | Run `Authenticate()` inside a `tea.Cmd` (goroutine). Browser opens outside terminal control — no conflict. |
+| Terminal resize | Handle `tea.WindowSizeMsg` in root model. Degrade gracefully if height is too small. |
+| Coexistence during development | Feature flag toggles between survey and TUI. Default stays survey until step 8.9. |
+
+---
+
 ## Future Roadmap (post v0.1)
 
 These are features to consider after the core works. Not to be implemented now.
