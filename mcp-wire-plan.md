@@ -835,7 +835,7 @@ github.com/charmbracelet/bubbles    v0.x
 
 After completion, `AlecAivazis/survey/v2` and its transitive deps are removed.
 
-### 8.0 — Foundation (dependencies and layout shell)
+### 8.0 — Foundation (dependencies and layout shell) ✅
 
 Add Bubble Tea, Lip Gloss, and Bubbles to `go.mod`. Create the package skeleton with the root model, theme, and a placeholder main-menu screen. Wire into `root.go` alongside the existing dispatch logic, guarded by a feature flag so the old survey path remains reachable during development.
 
@@ -855,13 +855,13 @@ Modify:
 
 Acceptance: `make test` passes. `bin/mcp-wire` shows the Bubble Tea menu.
 
-### 8.1 — Main Menu (Screen 1)
+### 8.1 — Main Menu (Screen 1) ✅
 
 Full menu with ↑↓ navigation, Enter select, q quit. Non-TUI actions (Status, List services, List targets) captured into an output viewer screen that displays pre-rendered text with "press any key to return".
 
 Acceptance: Menu navigable. Status/List output renders in TUI. Exit quits cleanly.
 
-### 8.2 — Source Selection (Screen 2)
+### 8.2 — Source Selection (Screen 2) ✅
 
 Conditional on registry feature flag. Three options with inline descriptions: Curated (recommended), Registry, Both.
 
@@ -869,7 +869,7 @@ Modify `internal/tui/app.go` to skip source screen when registry feature is off,
 
 Acceptance: With registry enabled → source screen shown. Without → skipped directly to service selection.
 
-### 8.3 — Service Selection (Screen 3) — hardest screen
+### 8.3 — Service Selection (Screen 3) — hardest screen ✅
 
 Live-filtered search over curated and/or registry catalog.
 

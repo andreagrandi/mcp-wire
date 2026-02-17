@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/andreagrandi/mcp-wire/internal/app"
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/config"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/andreagrandi/mcp-wire/internal/tui"
@@ -117,6 +118,7 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 }
 
 func tuiCallbacks(cfg *config.Config) tui.Callbacks {
+	registryEnabled := cfg.IsFeatureEnabled("registry")
 	return tui.Callbacks{
 		RenderStatus: func(w io.Writer) error {
 			return runStatusFlow(w, targetpkg.ConfigScopeEffective)
@@ -134,7 +136,13 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 			printTargetsList(w, allTargets())
 			return nil
 		},
-		RegistryEnabled: cfg.IsFeatureEnabled("registry"),
+		LoadCatalog: func(source string) (*catalog.Catalog, error) {
+			return loadCatalog(source, registryEnabled)
+		},
+		RegistrySyncStatus: func() string {
+			return registrySyncStatusLine(registryEnabled)
+		},
+		RegistryEnabled: registryEnabled,
 	}
 }
 

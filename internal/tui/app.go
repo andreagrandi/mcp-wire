@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
 )
 
 // Callbacks provides functions that generate output for display in the TUI
@@ -14,13 +16,16 @@ type Callbacks struct {
 	RenderStatus       func(w io.Writer) error
 	RenderServicesList func(w io.Writer) error
 	RenderTargetsList  func(w io.Writer) error
+	LoadCatalog        func(source string) (*catalog.Catalog, error)
+	RegistrySyncStatus func() string
 	RegistryEnabled    bool
 }
 
 // WizardState holds the accumulated selections across wizard screens.
 type WizardState struct {
-	Action string // "install" or "uninstall"
-	Source string // "curated", "registry", "all"
+	Action string        // "install" or "uninstall"
+	Source string        // "curated", "registry", "all"
+	Entry  catalog.Entry // selected service
 }
 
 // WizardModel is the root Bubble Tea model for the full-screen TUI.
@@ -68,11 +73,11 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case sourceSelectMsg:
 		return m.handleSourceSelect(msg)
 
+	case serviceSelectMsg:
+		return m.handleServiceSelect(msg)
+
 	case BackMsg:
-		m.screen = NewMenuScreen(m.theme)
-		m.state = WizardState{}
-		m.steps = nil
-		return m, m.screen.Init()
+		return m.handleBack()
 	}
 
 	var cmd tea.Cmd
@@ -160,36 +165,93 @@ func (m WizardModel) startWizard(action string) (tea.Model, tea.Cmd) {
 
 	// Registry disabled — default to curated, skip source screen.
 	m.state.Source = "curated"
-	return m.showServicePlaceholder()
+	return m.showServiceScreen()
 }
 
 func (m WizardModel) handleSourceSelect(msg sourceSelectMsg) (tea.Model, tea.Cmd) {
 	m.state.Source = msg.source
-	return m.showServicePlaceholder()
+	return m.showServiceScreen()
 }
 
-// showServicePlaceholder shows a placeholder for the service selection screen
-// (to be replaced in step 8.3).
-func (m WizardModel) showServicePlaceholder() (tea.Model, tea.Cmd) {
-	m.steps = sourceCompletedSteps(m.state.Source)
-	content := "Service selection is not yet available in the TUI.\n" +
+func (m WizardModel) showServiceScreen() (tea.Model, tea.Cmd) {
+	var steps []BreadcrumbStep
+	if m.callbacks.RegistryEnabled {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Source", Value: sourceValueLabel(m.state.Source),
+			Completed: true, Visible: true,
+		})
+	}
+	steps = append(steps, BreadcrumbStep{
+		Label: "Service", Active: true, Visible: true,
+	})
+	m.steps = steps
+	m.screen = NewServiceScreen(
+		m.theme, m.state.Source, m.contentHeight(),
+		m.callbacks.LoadCatalog, m.callbacks.RegistrySyncStatus,
+	)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleServiceSelect(msg serviceSelectMsg) (tea.Model, tea.Cmd) {
+	m.state.Entry = msg.entry
+	return m.showTargetPlaceholder()
+}
+
+// showTargetPlaceholder shows a placeholder for the target selection screen
+// (to be replaced in step 8.5).
+func (m WizardModel) showTargetPlaceholder() (tea.Model, tea.Cmd) {
+	var steps []BreadcrumbStep
+	if m.callbacks.RegistryEnabled {
+		steps = append(steps, BreadcrumbStep{
+			Label: "Source", Value: sourceValueLabel(m.state.Source),
+			Completed: true, Visible: true,
+		})
+	}
+	steps = append(steps, BreadcrumbStep{
+		Label: "Service", Value: m.state.Entry.Name,
+		Completed: true, Visible: true,
+	})
+	m.steps = steps
+	content := "Target selection is not yet available in the TUI.\n" +
 		"Use the command directly:\n\n" +
-		"  mcp-wire " + m.state.Action + " <service>\n"
+		"  mcp-wire " + m.state.Action + " " + m.state.Entry.Name + "\n"
 	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
 	return m, m.screen.Init()
 }
 
-// sourceCompletedSteps returns breadcrumb steps with Source completed.
-func sourceCompletedSteps(source string) []BreadcrumbStep {
+func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
+	switch m.screen.(type) {
+	case *ServiceScreen:
+		if m.callbacks.RegistryEnabled {
+			// Back to source selection.
+			m.screen = NewSourceScreen(m.theme)
+			m.state.Source = ""
+			m.state.Entry = catalog.Entry{}
+			m.steps = []BreadcrumbStep{
+				{Label: "Source", Active: true, Visible: true},
+			}
+			return m, m.screen.Init()
+		}
+	}
+
+	// Default: return to menu.
+	m.screen = NewMenuScreen(m.theme)
+	m.state = WizardState{}
+	m.steps = nil
+	return m, m.screen.Init()
+}
+
+// sourceValueLabel returns a display label for a source value.
+func sourceValueLabel(source string) string {
 	labels := map[string]string{
 		"curated":  "Curated",
 		"registry": "Registry",
 		"all":      "Both",
 	}
-
-	return []BreadcrumbStep{
-		{Label: "Source", Value: labels[source], Completed: true, Visible: true},
+	if l, ok := labels[source]; ok {
+		return l
 	}
+	return source
 }
 
 // renderToOutput runs a callback, captures its output, and returns an

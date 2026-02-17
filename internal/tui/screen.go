@@ -1,6 +1,10 @@
 package tui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
+)
 
 // ScreenID identifies a wizard screen.
 type ScreenID int
@@ -46,4 +50,9 @@ type menuSelectMsg struct {
 // sourceSelectMsg is sent when a source is selected.
 type sourceSelectMsg struct {
 	source string // "curated", "registry", "all"
+}
+
+// serviceSelectMsg is sent when a service is selected.
+type serviceSelectMsg struct {
+	entry catalog.Entry
 }

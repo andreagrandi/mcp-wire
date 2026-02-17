@@ -8,6 +8,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/service"
 )
 
 func testCallbacks() Callbacks {
@@ -156,33 +159,31 @@ func TestWizardModel_NilCallback(t *testing.T) {
 	assert.Contains(t, wm.screen.View(), "not available")
 }
 
-func TestWizardModel_InstallNoRegistry_SkipsSource(t *testing.T) {
+func TestWizardModel_InstallNoRegistry_SkipsToService(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
 	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
 	wm := updated.(WizardModel)
 
-	// Without registry, source screen is skipped.
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
+	// Without registry, source screen is skipped and service screen shown.
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
 	assert.Equal(t, "install", wm.state.Action)
 	assert.Equal(t, "curated", wm.state.Source)
-	assert.Contains(t, wm.screen.View(), "mcp-wire install")
 }
 
-func TestWizardModel_UninstallNoRegistry_SkipsSource(t *testing.T) {
+func TestWizardModel_UninstallNoRegistry_SkipsToService(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
 	assert.Equal(t, "uninstall", wm.state.Action)
 	assert.Equal(t, "curated", wm.state.Source)
-	assert.Contains(t, wm.screen.View(), "mcp-wire uninstall")
 }
 
 func testCallbacksWithRegistry() Callbacks {
@@ -229,7 +230,7 @@ func TestWizardModel_SourceBreadcrumb(t *testing.T) {
 	assert.True(t, wm.steps[0].Active)
 }
 
-func TestWizardModel_SourceSelectStoresState(t *testing.T) {
+func TestWizardModel_SourceSelectShowsServiceScreen(t *testing.T) {
 	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
 	model.height = 20
 
@@ -237,16 +238,16 @@ func TestWizardModel_SourceSelectStoresState(t *testing.T) {
 	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
 	wm := updated.(WizardModel)
 
-	// Select "registry" source.
+	// Select "registry" source → service screen.
 	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
 	wm = updated.(WizardModel)
 
 	assert.Equal(t, "registry", wm.state.Source)
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
 }
 
-func TestWizardModel_SourceSelectBreadcrumbCompleted(t *testing.T) {
+func TestWizardModel_SourceSelectBreadcrumb(t *testing.T) {
 	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
 	model.height = 20
 
@@ -256,9 +257,65 @@ func TestWizardModel_SourceSelectBreadcrumbCompleted(t *testing.T) {
 	updated, _ = wm.Update(sourceSelectMsg{source: "all"})
 	wm = updated.(WizardModel)
 
-	require.Len(t, wm.steps, 1)
+	require.Len(t, wm.steps, 2)
 	assert.True(t, wm.steps[0].Completed)
 	assert.Equal(t, "Both", wm.steps[0].Value)
+	assert.True(t, wm.steps[1].Active)
+	assert.Equal(t, "Service", wm.steps[1].Label)
+}
+
+func TestWizardModel_ServiceBreadcrumbNoRegistry(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	// Without registry, no Source breadcrumb, just Service.
+	require.Len(t, wm.steps, 1)
+	assert.True(t, wm.steps[0].Active)
+	assert.Equal(t, "Service", wm.steps[0].Label)
+}
+
+func TestWizardModel_ServiceSelectShowsPlaceholder(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Navigate to service screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	// Simulate service selection.
+	entry := catalog.FromCurated(service.Service{Name: "sentry", Description: "Error tracking"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	assert.Equal(t, "sentry", wm.state.Entry.Name)
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "mcp-wire install sentry")
+}
+
+func TestWizardModel_ServiceSelectBreadcrumb(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Source → Service.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "curated"})
+	wm = updated.(WizardModel)
+
+	// Select service.
+	entry := catalog.FromCurated(service.Service{Name: "sentry"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	require.Len(t, wm.steps, 2)
+	assert.True(t, wm.steps[0].Completed)
+	assert.Equal(t, "Curated", wm.steps[0].Value)
+	assert.True(t, wm.steps[1].Completed)
+	assert.Equal(t, "sentry", wm.steps[1].Value)
 }
 
 func TestWizardModel_BackFromSourceResetsState(t *testing.T) {
@@ -278,6 +335,48 @@ func TestWizardModel_BackFromSourceResetsState(t *testing.T) {
 	assert.True(t, isMenu)
 	assert.Empty(t, wm.state.Action)
 	assert.Nil(t, wm.steps)
+}
+
+func TestWizardModel_BackFromServiceToSource(t *testing.T) {
+	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
+	model.height = 20
+
+	// Navigate to source → select → service.
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+	updated, _ = wm.Update(sourceSelectMsg{source: "registry"})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	require.True(t, isService)
+
+	// Back from service goes to source.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isSource := wm.screen.(*SourceScreen)
+	assert.True(t, isSource)
+	assert.Equal(t, "install", wm.state.Action) // action preserved
+	assert.Empty(t, wm.state.Source)             // source cleared
+}
+
+func TestWizardModel_BackFromServiceNoRegistryGoesToMenu(t *testing.T) {
+	model := NewWizardModel(testCallbacks(), "1.0.0")
+	model.height = 20
+
+	// Navigate to service screen (no registry).
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	require.True(t, isService)
+
+	// Back goes to menu (no source screen to return to).
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isMenu := wm.screen.(*MenuScreen)
+	assert.True(t, isMenu)
 }
 
 func TestWizardModel_BackFromOutputReturnsToMenu(t *testing.T) {
