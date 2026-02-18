@@ -14,7 +14,7 @@ import (
 	"testing"
 )
 
-func TestOpenCodeLifecycleInstallStatusUninstall(t *testing.T) {
+func TestOpenCodeLifecycleInstallUninstall(t *testing.T) {
 	sandbox := newCLISandbox(t)
 
 	writeServiceDefinition(t, filepath.Join(sandbox.servicesDir, "remote-docs.yaml"), `name: remote-docs
@@ -23,24 +23,6 @@ transport: sse
 url: "https://docs.example.com/mcp"
 env: []
 `)
-
-	listServicesOutput, err := sandbox.runCLI("list", "services")
-	if err != nil {
-		t.Fatalf("list services failed: %v\n%s", err, listServicesOutput)
-	}
-
-	if !strings.Contains(listServicesOutput, "remote-docs") {
-		t.Fatalf("expected custom service in list output, got:\n%s", listServicesOutput)
-	}
-
-	listTargetsOutput, err := sandbox.runCLI("list", "targets")
-	if err != nil {
-		t.Fatalf("list targets failed: %v\n%s", err, listTargetsOutput)
-	}
-
-	if !strings.Contains(listTargetsOutput, "opencode") || !strings.Contains(listTargetsOutput, "installed") {
-		t.Fatalf("expected opencode installed in list output, got:\n%s", listTargetsOutput)
-	}
 
 	installOutput, err := sandbox.runCLI("install", "remote-docs", "--target", "opencode", "--no-prompt")
 	if err != nil {
@@ -61,15 +43,6 @@ env: []
 
 	if remoteDocs["url"] != "https://docs.example.com/mcp" {
 		t.Fatalf("expected URL to match, got %#v", remoteDocs["url"])
-	}
-
-	statusOutput, err := sandbox.runCLI("status")
-	if err != nil {
-		t.Fatalf("status failed: %v\n%s", err, statusOutput)
-	}
-
-	if !strings.Contains(statusOutput, "remote-docs") || !strings.Contains(statusOutput, "yes") {
-		t.Fatalf("expected status matrix to include installed service, got:\n%s", statusOutput)
 	}
 
 	uninstallOutput, err := sandbox.runCLI("uninstall", "remote-docs", "--target", "opencode")

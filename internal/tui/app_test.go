@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"errors"
-	"io"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -35,18 +33,6 @@ func testMockTargetsWithScopes() []targetpkg.Target {
 
 func testCallbacks() Callbacks {
 	return Callbacks{
-		RenderStatus: func(w io.Writer) error {
-			_, err := w.Write([]byte("Status output"))
-			return err
-		},
-		RenderServicesList: func(w io.Writer) error {
-			_, err := w.Write([]byte("Services output"))
-			return err
-		},
-		RenderTargetsList: func(w io.Writer) error {
-			_, err := w.Write([]byte("Targets output"))
-			return err
-		},
 		AllTargets: testMockTargets,
 	}
 }
@@ -76,27 +62,6 @@ func TestWizardModel_WindowSizeMsg(t *testing.T) {
 	assert.Equal(t, 40, wm.height)
 }
 
-func TestWizardModel_WindowSizeMsgForwardedToScreen(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
-	model.height = 30
-
-	// Navigate to an output screen so we can verify resize forwarding.
-	updated, _ := model.Update(menuSelectMsg{item: "Status"})
-	wm := updated.(WizardModel)
-
-	screen, ok := wm.screen.(*OutputScreen)
-	require.True(t, ok)
-	originalHeight := screen.viewHeight
-
-	// Resize terminal.
-	updated, _ = wm.Update(tea.WindowSizeMsg{Width: 80, Height: 50})
-	wm = updated.(WizardModel)
-
-	screen = wm.screen.(*OutputScreen)
-	assert.NotEqual(t, originalHeight, screen.viewHeight)
-	assert.Equal(t, 50-ChromeLines, screen.viewHeight)
-}
-
 func TestWizardModel_CtrlCQuits(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 
@@ -117,67 +82,6 @@ func TestWizardModel_ExitMenuQuits(t *testing.T) {
 	msg := cmd()
 	_, ok := msg.(tea.QuitMsg)
 	assert.True(t, ok)
-}
-
-func TestWizardModel_StatusShowsOutput(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
-	model.height = 20
-
-	updated, _ := model.Update(menuSelectMsg{item: "Status"})
-	wm := updated.(WizardModel)
-
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "Status output")
-}
-
-func TestWizardModel_ListServicesShowsOutput(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
-	model.height = 20
-
-	updated, _ := model.Update(menuSelectMsg{item: "List services"})
-	wm := updated.(WizardModel)
-
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "Services output")
-}
-
-func TestWizardModel_ListTargetsShowsOutput(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
-	model.height = 20
-
-	updated, _ := model.Update(menuSelectMsg{item: "List targets"})
-	wm := updated.(WizardModel)
-
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "Targets output")
-}
-
-func TestWizardModel_CallbackError(t *testing.T) {
-	cb := Callbacks{
-		RenderStatus: func(w io.Writer) error {
-			return errors.New("something went wrong")
-		},
-	}
-	model := NewWizardModel(cb, "1.0.0")
-	model.height = 20
-
-	updated, _ := model.Update(menuSelectMsg{item: "Status"})
-	wm := updated.(WizardModel)
-
-	assert.Contains(t, wm.screen.View(), "Error: something went wrong")
-}
-
-func TestWizardModel_NilCallback(t *testing.T) {
-	model := NewWizardModel(Callbacks{}, "1.0.0")
-	model.height = 20
-
-	updated, _ := model.Update(menuSelectMsg{item: "Status"})
-	wm := updated.(WizardModel)
-
-	assert.Contains(t, wm.screen.View(), "not available")
 }
 
 func TestWizardModel_InstallNoRegistry_SkipsToService(t *testing.T) {
@@ -394,25 +298,6 @@ func TestWizardModel_BackFromServiceNoRegistryGoesToMenu(t *testing.T) {
 	require.True(t, isService)
 
 	// Back goes to menu (no source screen to return to).
-	updated, _ = wm.Update(BackMsg{})
-	wm = updated.(WizardModel)
-
-	_, isMenu := wm.screen.(*MenuScreen)
-	assert.True(t, isMenu)
-}
-
-func TestWizardModel_BackFromOutputReturnsToMenu(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
-	model.height = 20
-
-	// Go to Status output.
-	updated, _ := model.Update(menuSelectMsg{item: "Status"})
-	wm := updated.(WizardModel)
-
-	_, isOutput := wm.screen.(*OutputScreen)
-	require.True(t, isOutput)
-
-	// Back returns to menu.
 	updated, _ = wm.Update(BackMsg{})
 	wm = updated.(WizardModel)
 

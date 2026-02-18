@@ -1,9 +1,7 @@
 package tui
 
 import (
-	"bytes"
 	"fmt"
-	"io"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -16,9 +14,6 @@ import (
 // Callbacks provides functions that generate output for display in the TUI
 // and configuration flags that control wizard behavior.
 type Callbacks struct {
-	RenderStatus          func(w io.Writer) error
-	RenderServicesList    func(w io.Writer) error
-	RenderTargetsList     func(w io.Writer) error
 	LoadCatalog           func(source string) (*catalog.Catalog, error)
 	RegistrySyncStatus    func() string
 	RefreshRegistryEntry  func(catalog.Entry) catalog.Entry
@@ -173,18 +168,6 @@ func (m WizardModel) handleMenuSelect(msg menuSelectMsg) (tea.Model, tea.Cmd) {
 	switch msg.item {
 	case "Exit":
 		return m, tea.Quit
-
-	case "Status":
-		m.screen = m.renderToOutput(m.callbacks.RenderStatus)
-		return m, m.screen.Init()
-
-	case "List services":
-		m.screen = m.renderToOutput(m.callbacks.RenderServicesList)
-		return m, m.screen.Init()
-
-	case "List targets":
-		m.screen = m.renderToOutput(m.callbacks.RenderTargetsList)
-		return m, m.screen.Init()
 
 	case "Install service":
 		return m.startWizard("install")
@@ -651,21 +634,6 @@ func sourceValueLabel(source string) string {
 		return l
 	}
 	return source
-}
-
-// renderToOutput runs a callback, captures its output, and returns an
-// OutputScreen displaying the result.
-func (m WizardModel) renderToOutput(fn func(io.Writer) error) *OutputScreen {
-	if fn == nil {
-		return NewOutputScreen(m.theme, "(not available)", m.contentHeight())
-	}
-
-	var buf bytes.Buffer
-	if err := fn(&buf); err != nil {
-		return NewOutputScreen(m.theme, "Error: "+err.Error(), m.contentHeight())
-	}
-
-	return NewOutputScreen(m.theme, buf.String(), m.contentHeight())
 }
 
 // contentHeightFromTerminal calculates the content area height from the

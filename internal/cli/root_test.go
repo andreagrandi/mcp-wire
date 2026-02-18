@@ -51,7 +51,7 @@ func TestRootCommandGuidedMenuExit(t *testing.T) {
 	var stdout bytes.Buffer
 	cmd := &cobra.Command{}
 	cmd.SetOut(&stdout)
-	cmd.SetIn(strings.NewReader("6\n"))
+	cmd.SetIn(strings.NewReader("3\n"))
 
 	err := runGuidedMainMenu(cmd)
 	assert.NoError(t, err)

@@ -15,6 +15,7 @@ import (
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/andreagrandi/mcp-wire/internal/tui"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 var rootCmd = &cobra.Command{
@@ -48,14 +49,23 @@ func isCacheCommand(args []string) bool {
 	return args[1] == "cache"
 }
 
+func canUseInteractiveUI(input io.Reader, output io.Writer) bool {
+	inputFile, inputOK := input.(*os.File)
+	outputFile, outputOK := output.(*os.File)
+	if !inputOK || !outputOK {
+		return false
+	}
+
+	return term.IsTerminal(int(inputFile.Fd())) && term.IsTerminal(int(outputFile.Fd()))
+}
+
 func runGuidedMainMenu(cmd *cobra.Command) error {
 	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		cfg, err := loadConfig()
-		if err == nil && cfg.IsFeatureEnabled("tui") {
-			return tui.Run(tuiCallbacks(cfg), app.Version)
+		cfg, _ := loadConfig()
+		if cfg == nil {
+			cfg = &config.Config{}
 		}
-
-		return runGuidedMainMenuSurvey(cmd)
+		return tui.Run(tuiCallbacks(cfg), app.Version)
 	}
 
 	return runGuidedMainMenuPlain(cmd)
@@ -69,12 +79,9 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 		fmt.Fprintln(output, "Main Menu")
 		fmt.Fprintln(output, "  1) Install service")
 		fmt.Fprintln(output, "  2) Uninstall service")
-		fmt.Fprintln(output, "  3) Status")
-		fmt.Fprintln(output, "  4) List services")
-		fmt.Fprintln(output, "  5) List targets")
-		fmt.Fprintln(output, "  6) Exit")
+		fmt.Fprintln(output, "  3) Exit")
 
-		choice, err := readTrimmedLine(reader, output, "Option [1-6]: ")
+		choice, err := readTrimmedLine(reader, output, "Option [1-3]: ")
 		if err != nil {
 			return fmt.Errorf("read menu option: %w", err)
 		}
@@ -92,29 +99,11 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 				return err
 			}
 			fmt.Fprintln(output)
-		case "3", "status":
-			fmt.Fprintln(output)
-			if err := runStatusFlow(output, targetpkg.ConfigScopeEffective); err != nil {
-				return err
-			}
-			fmt.Fprintln(output)
-		case "4", "services":
-			fmt.Fprintln(output)
-			services, err := loadServices()
-			if err != nil {
-				return fmt.Errorf("load services: %w", err)
-			}
-			printServicesList(output, services)
-			fmt.Fprintln(output)
-		case "5", "targets":
-			fmt.Fprintln(output)
-			printTargetsList(output, allTargets())
-			fmt.Fprintln(output)
-		case "6", "exit", "q", "quit":
+		case "3", "exit", "q", "quit":
 			fmt.Fprintln(output, "Goodbye.")
 			return nil
 		default:
-			fmt.Fprintf(output, "Invalid option %q. Enter 1-6.\n\n", choice)
+			fmt.Fprintf(output, "Invalid option %q. Enter 1-3.\n\n", choice)
 		}
 	}
 }
@@ -122,22 +111,6 @@ func runGuidedMainMenuPlain(cmd *cobra.Command) error {
 func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 	registryEnabled := cfg.IsFeatureEnabled("registry")
 	return tui.Callbacks{
-		RenderStatus: func(w io.Writer) error {
-			return runStatusFlow(w, targetpkg.ConfigScopeEffective)
-		},
-		RenderServicesList: func(w io.Writer) error {
-			services, err := loadServices()
-			if err != nil {
-				return fmt.Errorf("load services: %w", err)
-			}
-
-			printServicesList(w, services)
-			return nil
-		},
-		RenderTargetsList: func(w io.Writer) error {
-			printTargetsList(w, allTargets())
-			return nil
-		},
 		LoadCatalog: func(source string) (*catalog.Catalog, error) {
 			return loadCatalog(source, registryEnabled)
 		},

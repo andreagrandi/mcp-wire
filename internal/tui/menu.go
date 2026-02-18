@@ -9,9 +9,6 @@ import (
 var menuItems = []string{
 	"Install service",
 	"Uninstall service",
-	"Status",
-	"List services",
-	"List targets",
 	"Exit",
 }
 

@@ -31,8 +31,6 @@ mcp-wire/
 │   └── root.go                  # Cobra root command
 │   └── install.go               # install command
 │   └── uninstall.go             # uninstall command
-│   └── list.go                  # list command (services, targets)
-│   └── status.go                # status command
 ├── internal/
 │   ├── service/
 │   │   ├── service.go           # Service struct, YAML parsing
@@ -344,10 +342,7 @@ When the user runs `mcp-wire` with no subcommand, open an interactive menu:
 
 1. Install a service
 2. Uninstall a service
-3. Show status
-4. List services
-5. List targets
-6. Exit
+3. Exit
 
 #### 4A.2 — Install wizard flow ✅
 
@@ -382,35 +377,13 @@ When the user runs `mcp-wire` with no subcommand, open an interactive menu:
 - `mcp-wire uninstall` with no service argument should enter the service picker.
 - Explicit args/flags continue to work unchanged.
 
-### 4.1 — `mcp-wire list services` ✅
+### 4.1 — `mcp-wire list services` ✅ (removed)
 
-List all available service definitions found in the services directory.
+Removed — the list services command was a low-value informational view. Service discovery now happens through the install wizard's service picker.
 
-Output:
+### 4.2 — `mcp-wire list targets` ✅ (removed)
 
-```
-Available services:
-
-  sentry       Sentry error tracking MCP
-  jira         Jira project management MCP (Atlassian)
-  context7     Context7 documentation lookup MCP
-  filesystem   Local filesystem access MCP
-```
-
-### 4.2 — `mcp-wire list targets` ✅
-
-List all known targets and whether they are detected on this system.
-
-Output:
-
-```
-Targets:
-
-  claude       Claude Code   ✓ installed
-  codex        Codex CLI     ✓ installed
-  geminicli    Gemini CLI    ✗ not found
-  opencode     OpenCode      ✗ not found
-```
+Removed — the list targets command was a low-value informational view. Target selection now happens through the install/uninstall wizard.
 
 ### 4.3 — `mcp-wire install <service>` ✅
 
@@ -441,20 +414,9 @@ Flow:
 2. If `<service>` is omitted, enter interactive service selection.
 3. Optionally ask if the user wants to remove stored credentials for this service.
 
-### 4.5 — `mcp-wire status` ✅
+### 4.5 — `mcp-wire status` ✅ (removed)
 
-Show a matrix of services × targets.
-
-Output:
-
-```
-                Claude Code    Codex
-  sentry        ✓              ✓
-  jira          ✓              ✗
-  context7      ✗              ✗
-```
-
-Implementation: for each installed target, call `target.List()` and cross-reference with known services.
+Removed — the status command only showed curated YAML services, not all servers installed in a target, making it misleading.
 
 ---
 
@@ -556,13 +518,13 @@ Implement in this exact order to have something working as early as possible:
 
 1. ✅ **Go module + main.go + Cobra skeleton** — just `mcp-wire --help` works.
 2. ✅ **Service struct + YAML loader + validation** — can parse service files.
-3. ✅ **`list services` command** — first working command, proves the YAML loading.
+3. ✅ **`list services` command** — first working command, proves the YAML loading. *(later removed — low-value informational view)*
 4. ✅ **Target interface + Claude Code implementation** — can read/write Claude Code config.
-5. ✅ **`list targets` command** — detects installed tools.
+5. ✅ **`list targets` command** — detects installed tools. *(later removed — low-value informational view)*
 6. ✅ **Credential resolver (env + file sources)** — can resolve and store tokens.
 7. ✅ **`install` command with interactive prompt** — the core feature, end-to-end flow.
 8. ✅ **`uninstall` command** — straightforward once install works.
-9. ✅ **`status` command** — reads from all targets, displays matrix.
+9. ✅ **`status` command** — reads from all targets, displays matrix. *(later removed — only showed curated services, misleading)*
 10. ✅ **Codex target implementation** — second target, validates the abstraction.
 11. ✅ **Initial service YAML files** — ship with 3-5 verified services.
 12. ✅ **README, contributing guide** — explain how to add services and targets.
@@ -684,15 +646,14 @@ When registry is enabled, add source filtering:
 
 - `--source curated|registry|all` (default: `curated`)
 
-Apply this to:
-
-- `mcp-wire list services`
-- install flows that pick services interactively
+Apply this to install flows that pick services interactively.
 
 When registry is disabled:
 
 - Do not expose `--source`.
 - Do not mention registry in help/usage text.
+
+Note: `mcp-wire list services` was later removed as a low-value informational view.
 
 ### 7.6 — Guided UI changes (only when enabled) ✅
 
@@ -748,14 +709,15 @@ Behavior:
 - Default: warn and continue.
 - Optional strict mode (for CI): fail fast when runtime is missing (for example `--strict-runtime-check`).
 
-### 7.10 — Status/uninstall parity for mixed sources
+### 7.10 — Uninstall parity for mixed sources
 
-Ensure `status` and `uninstall` handle registry-installed services as first-class entries, not only curated YAML service names.
+Ensure `uninstall` handles registry-installed services as first-class entries, not only curated YAML service names.
 
 Requirements:
 
-- Status should not hide registry-installed entries.
 - Uninstall should work by installed service key regardless of source.
+
+Note: the `status` command was removed because it only showed curated YAML services, not all servers installed in a target.
 
 ### 7.11 — Incremental implementation slices
 
@@ -764,12 +726,12 @@ Suggested order for shipping gradually:
 1. ✅ Feature gate + settings file + no-registry-references enforcement.
 2. ✅ Registry read client + latest-only detail lookup + basic tests.
 3. ✅ Cache/index + local search.
-4. ✅ `list services` source filter (`curated` default).
+4. ✅ `list services` source filter (`curated` default). *(list services later removed)*
 5. ✅ Guided UI source step and merged list markers.
 6. ✅ Registry remote-install support.
 7. Runtime preflight warnings.
 8. ✅ Registry package-install support.
-9. Status/uninstall parity for mixed sources.
+9. Uninstall parity for mixed sources.
 10. Hardening, integration tests, docs.
 
 ---
@@ -857,9 +819,9 @@ Acceptance: `make test` passes. `bin/mcp-wire` shows the Bubble Tea menu.
 
 ### 8.1 — Main Menu (Screen 1) ✅
 
-Full menu with ↑↓ navigation, Enter select, q quit. Non-TUI actions (Status, List services, List targets) captured into an output viewer screen that displays pre-rendered text with "press any key to return".
+Full menu with ↑↓ navigation, Enter select, q quit. Three items: Install service, Uninstall service, Exit.
 
-Acceptance: Menu navigable. Status/List output renders in TUI. Exit quits cleanly.
+Acceptance: Menu navigable. Exit quits cleanly.
 
 ### 8.2 — Source Selection (Screen 2) ✅
 

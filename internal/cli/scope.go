@@ -21,20 +21,6 @@ func parseInstallUninstallScope(value string) (targetpkg.ConfigScope, error) {
 	}
 }
 
-func parseStatusScope(value string) (targetpkg.ConfigScope, error) {
-	scope := targetpkg.ConfigScope(strings.ToLower(strings.TrimSpace(value)))
-	if scope == "" {
-		scope = targetpkg.ConfigScopeEffective
-	}
-
-	switch scope {
-	case targetpkg.ConfigScopeUser, targetpkg.ConfigScopeProject, targetpkg.ConfigScopeEffective:
-		return scope, nil
-	default:
-		return "", fmt.Errorf("invalid scope %q (supported: user, project, effective)", value)
-	}
-}
-
 func targetSupportsScope(targetDefinition targetpkg.Target, scope targetpkg.ConfigScope) bool {
 	scopedTarget, ok := targetDefinition.(targetpkg.ScopedTarget)
 	if !ok {

@@ -6,62 +6,80 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 
 ## How It Works
 
-No manual config editing needed. In a terminal, `mcp-wire` opens a guided menu.
+No manual config editing needed. Run `mcp-wire` to open a full-screen TUI with guided install and uninstall wizards.
+
+### Choose a source
+
+Pick from bundled curated services or the community MCP registry:
 
 ```text
-$ mcp-wire
-Use Up/Down arrows, Enter to select.
-> Main Menu
-  Install service
-  Uninstall service
-  Status
-  List services
-  List targets
-  Exit
+mcp-wire — Install
+
+Install › Source
+
+  Where should mcp-wire look for services?
+
+  › Curated services       recommended, maintained by mcp-wire
+    Registry services      community-published MCP servers
+    Both                   curated + registry combined
+
+↑↓ move  Enter select  Esc back
 ```
 
-Install flow (example):
+### Search and select a service
+
+Live-filtered search across hundreds of registry entries:
 
 ```text
-$ mcp-wire install
-Install Wizard
+mcp-wire — Install
 
-Step 1/4: Service
-Use Up/Down arrows, Enter to select. Type to filter.
-> Select service
-  jira - Atlassian Rovo MCP server (OAuth)
+Install › community ✓ › Service › Targets › Review › Apply
 
-Step 2/4: Targets
-Detected targets:
-  Claude Code (claude) [installed]
-  OpenCode (opencode) [installed]
-  Codex (codex) [installed]
-Use Up/Down arrows, Space to toggle, Right to select all, Left to clear all, Enter to confirm. Type to filter. Esc goes back.
-[ ] Claude Code (claude)
-[x] OpenCode (opencode)
-[ ] Codex (codex)
+  Search: sentry                                     2 matches
 
-Step 3/4: Review
-Service: jira
-Targets: OpenCode
-Credentials: prompt as needed
-Use Up/Down arrows, Enter to select.
-> Apply changes?
-  Yes
-  No
+  › ai.sentry/sentry-mcp
+    Sentry error tracking and performance monitoring MCP server
 
-Step 4/4: Apply
-Installing to: OpenCode
-  OpenCode: configured
-Equivalent command: mcp-wire install jira --target opencode
+    ai.example/sentry-alerts
+    Forward Sentry alerts to your AI coding assistant
+
+                          — end of results —
+
+↑↓ move  Enter select  type to filter  Esc back
 ```
 
-Quick checks:
+### Review before installing
+
+Registry services show metadata and require explicit confirmation:
+
+```text
+mcp-wire — Install
+
+Install › community ✓ › Service › Targets › Review › Apply
+
+  △ Registry Service — not curated by mcp-wire
+
+  ai.sentry/sentry-mcp
+  Sentry error tracking and performance monitoring MCP server
+
+  Source:    community registry
+  Transport: http
+  URL:       https://mcp.sentry.io/sse
+
+  Registry services are community-published. Review before proceeding.
+
+  › Yes, proceed     No, go back
+
+←→ move  Enter confirm  Esc back
+```
+
+### Explicit CLI mode
+
+For scripting and CI, explicit commands work without the TUI:
 
 ```bash
-mcp-wire status
-mcp-wire list services
-mcp-wire status --scope effective
+mcp-wire install jira --target claude --no-prompt
+mcp-wire uninstall sentry --target opencode
 ```
 
 ### Scope-aware installs (Claude Code)
@@ -75,7 +93,6 @@ For targets that support scopes (currently Claude Code), you can choose where MC
 mcp-wire install jira --target claude --scope user
 mcp-wire install jira --target claude --scope project
 mcp-wire uninstall jira --target claude --scope project
-mcp-wire status --scope project
 ```
 
 ## Supported Targets
@@ -84,14 +101,26 @@ mcp-wire status --scope project
 - `codex` - Codex CLI
 - `opencode` - OpenCode
 
-## Supported Services (bundled)
+## Supported Services
+
+### Bundled (curated)
+
+These ship with the binary and work out of the box:
 
 - `context7` - Context7 documentation lookup MCP (OAuth)
 - `jira` - Atlassian Rovo MCP server (OAuth)
 - `sentry` - Sentry MCP server (OAuth)
 - `playwright` - Playwright browser automation MCP (`npx @playwright/mcp@latest`)
 
-Use `mcp-wire list services` and `mcp-wire list targets` to see what is available on your machine.
+### MCP Registry (community)
+
+mcp-wire can also install from the [Official MCP Registry](https://registry.modelcontextprotocol.io), giving access to hundreds of community-published MCP servers. Enable with:
+
+```bash
+mcp-wire feature enable registry
+```
+
+Once enabled, the install wizard offers a source selection step (Curated / Registry / Both) with live search across all registry entries.
 
 ## Installation
 

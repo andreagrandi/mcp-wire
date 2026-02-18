@@ -16,10 +16,6 @@ import (
 )
 
 func runInstallWizard(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string, noPrompt bool) error {
-	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runInstallWizardSurvey(cmd, targetSlugs, noPrompt, targetpkg.ConfigScopeUser, false)
-	}
-
 	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt, targetpkg.ConfigScopeUser, false)
 }
 
@@ -31,10 +27,6 @@ func runInstallWizardWithScope(
 	scope targetpkg.ConfigScope,
 	scopeSet bool,
 ) error {
-	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runInstallWizardSurvey(cmd, targetSlugs, noPrompt, scope, scopeSet)
-	}
-
 	return runInstallWizardPlain(cmd, reader, targetSlugs, noPrompt, scope, scopeSet)
 }
 
@@ -153,10 +145,6 @@ func runInstallWizardPlain(
 }
 
 func runUninstallWizard(cmd *cobra.Command, reader *bufio.Reader, targetSlugs []string) error {
-	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runUninstallWizardSurvey(cmd, targetSlugs, targetpkg.ConfigScopeUser, false)
-	}
-
 	return runUninstallWizardPlain(cmd, reader, targetSlugs, targetpkg.ConfigScopeUser, false)
 }
 
@@ -167,10 +155,6 @@ func runUninstallWizardWithScope(
 	scope targetpkg.ConfigScope,
 	scopeSet bool,
 ) error {
-	if canUseInteractiveUI(cmd.InOrStdin(), cmd.OutOrStdout()) {
-		return runUninstallWizardSurvey(cmd, targetSlugs, scope, scopeSet)
-	}
-
 	return runUninstallWizardPlain(cmd, reader, targetSlugs, scope, scopeSet)
 }
 

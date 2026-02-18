@@ -29,6 +29,9 @@
 - `--no-prompt` mode now silently applies default values for required and optional env vars, enabling non-interactive installs of registry services with defaulted variables.
 - Optional env vars with defaults are populated into resolved env so URL/header substitution can use them.
 
+### Removed
+- Removed `status`, `list services`, and `list targets` CLI commands and their TUI menu entries. The status command only showed curated YAML services (not all installed servers), making it misleading. The list commands were low-value informational views. The guided menu now shows only Install, Uninstall, and Exit.
+
 ### Changed
 - Registry survey service picker UX was reworked to improve discoverability: it now uses a clearer filter prompt, keeps list focus behavior predictable, avoids noisy repeated hint lines, and handles initial empty-filter state more cleanly.
 - Registry sync progress in survey mode is now shown as a single inline-updating status line during initial sync waits instead of printing a new line per progress update.
