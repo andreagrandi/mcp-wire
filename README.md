@@ -99,6 +99,7 @@ mcp-wire uninstall jira --target claude --scope project
 
 - `claude` - Claude Code
 - `codex` - Codex CLI
+- `gemini` - Gemini CLI
 - `opencode` - OpenCode
 
 ## Supported Services

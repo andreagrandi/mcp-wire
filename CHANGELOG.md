@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.2.1 - 2026-02-18
+
 ### Added
 - Gemini CLI target: install MCP services into `~/.gemini/settings.json` with support for stdio, SSE, and streamable HTTP transports.
 
