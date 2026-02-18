@@ -941,6 +941,10 @@ Reuses most install screens. `WizardState.Action = "uninstall"` controls renderi
 
 Acceptance: Full uninstall flow works end-to-end in the TUI.
 
+### 8.8.1 — Mockup alignment pass ✅
+
+Visual polish across all TUI screens to match design mockups: source screen question header and inline descriptions, service search prompt and scroll indicator formatting, scope heading with target names and footer, review em-dash labels with Apply-first choice order and inline command display, apply service-name headers with per-state icons (✓/△/✗) and retry choice on failure.
+
 ### 8.9 — Cleanup and Survey Removal
 
 Remove survey dependency and transition code.

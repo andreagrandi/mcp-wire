@@ -338,7 +338,7 @@ func (m WizardModel) showScopeScreen() (tea.Model, tea.Cmd) {
 		Label: "Scope", Active: true, Visible: true,
 	})
 	m.steps = steps
-	m.screen = NewScopeScreen(m.theme)
+	m.screen = NewScopeScreen(m.theme, scopedTargetNames(m.state.Targets))
 	return m, m.screen.Init()
 }
 
@@ -570,6 +570,25 @@ func anyTargetSupportsProjectScope(targets []targetpkg.Target) bool {
 	return false
 }
 
+// scopedTargetNames returns a comma-separated list of target names that
+// support project scope, for display in the scope selection heading.
+func scopedTargetNames(targets []targetpkg.Target) string {
+	var names []string
+	for _, t := range targets {
+		st, ok := t.(targetpkg.ScopedTarget)
+		if !ok {
+			continue
+		}
+		for _, s := range st.SupportedScopes() {
+			if s == targetpkg.ConfigScopeProject {
+				names = append(names, t.Name())
+				break
+			}
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
 func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen.(type) {
 	case *ApplyScreen:
@@ -624,9 +643,9 @@ func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 // sourceValueLabel returns a display label for a source value.
 func sourceValueLabel(source string) string {
 	labels := map[string]string{
-		"curated":  "Curated",
-		"registry": "Registry",
-		"all":      "Both",
+		"curated":  "Curated services",
+		"registry": "Registry services (community)",
+		"all":      "Both (curated + registry)",
 	}
 	if l, ok := labels[source]; ok {
 		return l

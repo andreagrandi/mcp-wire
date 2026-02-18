@@ -280,7 +280,7 @@ func TestWizardModel_SourceSelectBreadcrumb(t *testing.T) {
 
 	require.Len(t, wm.steps, 2)
 	assert.True(t, wm.steps[0].Completed)
-	assert.Equal(t, "Both", wm.steps[0].Value)
+	assert.Equal(t, "Both (curated + registry)", wm.steps[0].Value)
 	assert.True(t, wm.steps[1].Active)
 	assert.Equal(t, "Service", wm.steps[1].Label)
 }
@@ -333,7 +333,7 @@ func TestWizardModel_ServiceSelectBreadcrumb(t *testing.T) {
 
 	require.Len(t, wm.steps, 3)
 	assert.True(t, wm.steps[0].Completed)
-	assert.Equal(t, "Curated", wm.steps[0].Value)
+	assert.Equal(t, "Curated services", wm.steps[0].Value)
 	assert.True(t, wm.steps[1].Completed)
 	assert.Equal(t, "sentry", wm.steps[1].Value)
 	assert.True(t, wm.steps[2].Active)
@@ -590,7 +590,7 @@ func TestWizardModel_TrustBreadcrumb(t *testing.T) {
 
 	require.Len(t, wm.steps, 3)
 	assert.True(t, wm.steps[0].Completed)
-	assert.Equal(t, "Registry", wm.steps[0].Value)
+	assert.Equal(t, "Registry services (community)", wm.steps[0].Value)
 	assert.True(t, wm.steps[1].Completed)
 	assert.Equal(t, "community-svc", wm.steps[1].Value)
 	assert.True(t, wm.steps[2].Active)
@@ -1095,10 +1095,11 @@ func TestWizardModel_ReviewViewShowsSummary(t *testing.T) {
 	wm := navigateToReview(t, testCallbacks())
 
 	view := wm.screen.View()
-	assert.Contains(t, view, "Install")
 	assert.Contains(t, view, "sentry")
 	assert.Contains(t, view, "Claude Code")
 	assert.Contains(t, view, "mcp-wire install sentry")
+	assert.Contains(t, view, "Apply")
+	assert.Contains(t, view, "Cancel")
 }
 
 func TestWizardModel_ReviewUninstallFlow(t *testing.T) {
@@ -1120,7 +1121,6 @@ func TestWizardModel_ReviewUninstallFlow(t *testing.T) {
 	require.True(t, isReview)
 
 	view := wm.screen.View()
-	assert.Contains(t, view, "Uninstall")
 	assert.Contains(t, view, "mcp-wire uninstall sentry")
 	assert.NotContains(t, view, "Credentials")
 }

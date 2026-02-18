@@ -29,7 +29,7 @@ func NewReviewScreen(theme Theme, state WizardState, registryEnabled bool) *Revi
 		theme:           theme,
 		state:           state,
 		registryEnabled: registryEnabled,
-		cursor:          1, // default to Apply
+		cursor:          0, // default to Apply (first choice)
 	}
 }
 
@@ -52,7 +52,7 @@ func (r *ReviewScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				r.cursor++
 			}
 		case "enter":
-			confirmed := r.cursor == 1
+			confirmed := r.cursor == 0
 			return r, func() tea.Msg {
 				return reviewConfirmMsg{confirmed: confirmed}
 			}
@@ -69,19 +69,12 @@ func (r *ReviewScreen) View() string {
 
 	b.WriteString("\n")
 
-	actionLabel := "Install"
-	if r.state.Action == "uninstall" {
-		actionLabel = "Uninstall"
-	}
-
 	// Summary lines.
-	b.WriteString(r.summaryLine("Action", actionLabel))
-	b.WriteString(r.summaryLine("Service", r.serviceLabel()))
-
 	if r.registryEnabled {
 		b.WriteString(r.summaryLine("Source", sourceValueLabel(r.state.Source)))
 	}
 
+	b.WriteString(r.summaryLine("Service", r.serviceLabel()))
 	b.WriteString(r.summaryLine("Targets", r.targetNames()))
 
 	if anyTargetSupportsProjectScope(r.state.Targets) {
@@ -94,14 +87,10 @@ func (r *ReviewScreen) View() string {
 
 	// Equivalent command.
 	b.WriteString("\n")
-	b.WriteString(r.theme.Dim.Render("  Equivalent command:"))
-	b.WriteString("\n")
-	b.WriteString("    " + r.equivalentCommand())
-	b.WriteString("\n")
+	b.WriteString(r.summaryLine("Command", r.equivalentCommand()))
 
-	// Confirmation.
+	// Confirmation choices.
 	b.WriteString("\n")
-	b.WriteString("  Apply changes?\n\n")
 	b.WriteString(r.renderChoices())
 
 	return b.String()
@@ -114,7 +103,7 @@ func (r *ReviewScreen) summaryLine(label, value string) string {
 func (r *ReviewScreen) serviceLabel() string {
 	desc := r.state.Entry.Description()
 	if desc != "" {
-		return r.state.Entry.Name + " (" + desc + ")"
+		return r.state.Entry.Name + " \u2014 " + desc
 	}
 	return r.state.Entry.Name
 }
@@ -139,7 +128,7 @@ func (r *ReviewScreen) equivalentCommand() string {
 }
 
 func (r *ReviewScreen) renderChoices() string {
-	labels := []string{"Cancel", "Apply"}
+	labels := []string{"Apply", "Cancel"}
 	var parts []string
 
 	for i, label := range labels {
@@ -174,9 +163,9 @@ func (r *ReviewScreen) Cursor() int {
 func scopeLabel(scope targetpkg.ConfigScope) string {
 	switch scope {
 	case targetpkg.ConfigScopeProject:
-		return "project"
+		return "Project (current directory only)"
 	case targetpkg.ConfigScopeUser:
-		return "user"
+		return "User (for targets that support it)"
 	default:
 		return string(scope)
 	}

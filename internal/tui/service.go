@@ -45,7 +45,7 @@ type ServiceScreen struct {
 // NewServiceScreen creates a new service selection screen.
 func NewServiceScreen(theme Theme, source string, viewHeight int, loadFn func(string) (*catalog.Catalog, error), syncFn func() string) *ServiceScreen {
 	ti := textinput.New()
-	ti.Prompt = "  Search > "
+	ti.Prompt = "  Search: "
 	ti.Placeholder = "type to filter..."
 	ti.CharLimit = 100
 	ti.Focus() // Focus immediately so keys are accepted (Init returns the blink cmd).
@@ -274,7 +274,10 @@ func (s *ServiceScreen) View() string {
 
 	if hasMore {
 		remaining := len(s.filtered) - end
-		b.WriteString(s.theme.Dim.Render("  \u25bc " + strings.Repeat(".", 3) + " " + itoa(remaining) + " more"))
+		b.WriteString(s.theme.Dim.Render("  \u25bc " + itoa(remaining) + " more"))
+	} else if len(s.filtered) > 0 {
+		b.WriteString("\n")
+		b.WriteString(s.theme.Dim.Render("          \u2014 end of results \u2014"))
 	}
 
 	return b.String()
@@ -329,6 +332,7 @@ func (s *ServiceScreen) StatusHints() []KeyHint {
 	return []KeyHint{
 		{Key: "\u2191\u2193", Desc: "move"},
 		{Key: "Enter", Desc: "select"},
+		{Key: "type", Desc: "to filter"},
 		{Key: "Esc", Desc: "back"},
 	}
 }

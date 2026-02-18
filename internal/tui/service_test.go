@@ -380,7 +380,7 @@ func TestServiceScreen_StatusHints(t *testing.T) {
 	screen := loadedServiceScreen(t, 20)
 
 	hints := screen.StatusHints()
-	assert.Len(t, hints, 3)
+	assert.Len(t, hints, 4)
 
 	descs := make([]string, len(hints))
 	for i, h := range hints {
@@ -388,7 +388,15 @@ func TestServiceScreen_StatusHints(t *testing.T) {
 	}
 	assert.Contains(t, descs, "move")
 	assert.Contains(t, descs, "select")
+	assert.Contains(t, descs, "to filter")
 	assert.Contains(t, descs, "back")
+}
+
+func TestServiceScreen_ViewShowsEndOfResults(t *testing.T) {
+	screen := loadedServiceScreen(t, 20)
+
+	view := screen.View()
+	assert.Contains(t, view, "end of results")
 }
 
 func TestServiceScreen_StatusHintsDuringLoading(t *testing.T) {

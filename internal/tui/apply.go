@@ -293,9 +293,9 @@ func (a *ApplyScreen) View() string {
 
 	if a.subState == applySubStateRunning {
 		if a.state.Action == "uninstall" {
-			b.WriteString("  Removing from targets...\n")
+			b.WriteString("  Removing " + a.svc.Name + "\u2026\n")
 		} else {
-			b.WriteString("  Installing to targets...\n")
+			b.WriteString("  Installing " + a.svc.Name + "\u2026\n")
 		}
 	} else {
 		b.WriteString(a.doneHeader())
@@ -306,6 +306,12 @@ func (a *ApplyScreen) View() string {
 	// Per-target status rows.
 	for _, r := range a.results {
 		b.WriteString(a.renderTargetRow(r))
+		b.WriteString("\n")
+	}
+
+	if a.subState == applySubStateRunning {
+		b.WriteString("\n")
+		b.WriteString(a.theme.Dim.Render("  please wait\u2026"))
 		b.WriteString("\n")
 	}
 
@@ -347,6 +353,7 @@ func (a *ApplyScreen) View() string {
 }
 
 func (a *ApplyScreen) doneHeader() string {
+	name := a.svc.Name
 	if a.hasFailures {
 		allFailed := true
 		for _, r := range a.results {
@@ -356,15 +363,18 @@ func (a *ApplyScreen) doneHeader() string {
 			}
 		}
 		if allFailed {
-			return a.theme.Error.Render("  Operation failed.") + "\n"
+			return a.theme.Error.Render("  \u2717 "+name+" failed") + "\n"
 		}
-		return a.theme.Warning.Render("  Completed with errors.") + "\n"
+		if a.state.Action == "uninstall" {
+			return a.theme.Warning.Render("  \u25b3 "+name+" partially removed") + "\n"
+		}
+		return a.theme.Warning.Render("  \u25b3 "+name+" partially installed") + "\n"
 	}
 
 	if a.state.Action == "uninstall" {
-		return a.theme.Completed.Render("  Uninstall complete!") + "\n"
+		return a.theme.Completed.Render("  \u2713 "+name+" removed successfully") + "\n"
 	}
-	return a.theme.Completed.Render("  Install complete!") + "\n"
+	return a.theme.Completed.Render("  \u2713 "+name+" installed successfully") + "\n"
 }
 
 func (a *ApplyScreen) renderTargetRow(r targetResult) string {
@@ -394,7 +404,7 @@ func (a *ApplyScreen) renderTargetRow(r targetResult) string {
 			statusLabel = "configured"
 		}
 	} else if r.status == "failed" && r.err != nil {
-		statusLabel = fmt.Sprintf("failed (%s)", r.err.Error())
+		statusLabel = fmt.Sprintf("failed \u2014 %s", r.err.Error())
 	}
 
 	return fmt.Sprintf("%s %-16s %s", icon, r.name, statusLabel)
@@ -418,7 +428,9 @@ type postActionChoice struct {
 
 func (a *ApplyScreen) postActionChoices() []postActionChoice {
 	var actionLabel string
-	if a.state.Action == "uninstall" {
+	if a.hasFailures {
+		actionLabel = "Retry failed"
+	} else if a.state.Action == "uninstall" {
 		actionLabel = "Uninstall another"
 	} else {
 		actionLabel = "Install another"

@@ -29,7 +29,7 @@ func TestNewReviewScreen(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
-	assert.Equal(t, 1, screen.Cursor()) // default to Apply
+	assert.Equal(t, 0, screen.Cursor()) // default to Apply (first choice)
 }
 
 func TestReviewScreen_Init(t *testing.T) {
@@ -38,26 +38,26 @@ func TestReviewScreen_Init(t *testing.T) {
 	assert.Nil(t, screen.Init())
 }
 
-func TestReviewScreen_NavigateLeft(t *testing.T) {
-	theme := NewTheme()
-	screen := NewReviewScreen(theme, testReviewState(), false)
-
-	// Default cursor=1 (Apply), move left to Cancel.
-	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	updated := s.(*ReviewScreen)
-	assert.Equal(t, 0, updated.Cursor())
-}
-
 func TestReviewScreen_NavigateRight(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
-	// Move left then right.
-	var s Screen = screen
-	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyLeft})
-	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRight})
+	// Default cursor=0 (Apply), move right to Cancel.
+	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyRight})
 	updated := s.(*ReviewScreen)
 	assert.Equal(t, 1, updated.Cursor())
+}
+
+func TestReviewScreen_NavigateLeftBack(t *testing.T) {
+	theme := NewTheme()
+	screen := NewReviewScreen(theme, testReviewState(), false)
+
+	// Move right then left.
+	var s Screen = screen
+	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyRight})
+	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated := s.(*ReviewScreen)
+	assert.Equal(t, 0, updated.Cursor())
 }
 
 func TestReviewScreen_NavigateLeftAtStart(t *testing.T) {
@@ -86,22 +86,22 @@ func TestReviewScreen_VimKeys(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
-	// 'h' moves left.
-	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
-	updated := s.(*ReviewScreen)
-	assert.Equal(t, 0, updated.Cursor())
-
 	// 'l' moves right.
-	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
-	updated = s.(*ReviewScreen)
+	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	updated := s.(*ReviewScreen)
 	assert.Equal(t, 1, updated.Cursor())
+
+	// 'h' moves left.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	updated = s.(*ReviewScreen)
+	assert.Equal(t, 0, updated.Cursor())
 }
 
 func TestReviewScreen_EnterConfirmsApply(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
-	// Default cursor=1 (Apply).
+	// Default cursor=0 (Apply).
 	_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.NotNil(t, cmd)
 
@@ -115,8 +115,8 @@ func TestReviewScreen_EnterConfirmsCancel(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
-	// Move to Cancel.
-	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	// Move to Cancel (index 1).
+	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyRight})
 
 	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.NotNil(t, cmd)
@@ -139,22 +139,22 @@ func TestReviewScreen_EscSendsBack(t *testing.T) {
 	assert.True(t, ok)
 }
 
-func TestReviewScreen_ViewShowsAction(t *testing.T) {
+func TestReviewScreen_ViewShowsInstallCommand(t *testing.T) {
 	theme := NewTheme()
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
 	view := screen.View()
-	assert.Contains(t, view, "Install")
+	assert.Contains(t, view, "mcp-wire install")
 }
 
-func TestReviewScreen_ViewShowsUninstallAction(t *testing.T) {
+func TestReviewScreen_ViewShowsUninstallCommand(t *testing.T) {
 	theme := NewTheme()
 	state := testReviewState()
 	state.Action = "uninstall"
 	screen := NewReviewScreen(theme, state, false)
 
 	view := screen.View()
-	assert.Contains(t, view, "Uninstall")
+	assert.Contains(t, view, "mcp-wire uninstall")
 }
 
 func TestReviewScreen_ViewShowsServiceName(t *testing.T) {
@@ -180,7 +180,7 @@ func TestReviewScreen_ViewShowsSourceWhenRegistryEnabled(t *testing.T) {
 	screen := NewReviewScreen(theme, testReviewState(), true)
 
 	view := screen.View()
-	assert.Contains(t, view, "Curated")
+	assert.Contains(t, view, "Curated services")
 }
 
 func TestReviewScreen_ViewHidesSourceWhenRegistryDisabled(t *testing.T) {
@@ -188,7 +188,7 @@ func TestReviewScreen_ViewHidesSourceWhenRegistryDisabled(t *testing.T) {
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
 	view := screen.View()
-	assert.NotContains(t, view, "Curated")
+	assert.NotContains(t, view, "Source:")
 }
 
 func TestReviewScreen_ViewShowsScopeForSupportedTargets(t *testing.T) {
@@ -204,7 +204,7 @@ func TestReviewScreen_ViewShowsScopeForSupportedTargets(t *testing.T) {
 	screen := NewReviewScreen(theme, state, false)
 
 	view := screen.View()
-	assert.Contains(t, view, "project")
+	assert.Contains(t, view, "Project (current directory only)")
 }
 
 func TestReviewScreen_ViewHidesScopeForUnsupportedTargets(t *testing.T) {
@@ -275,9 +275,8 @@ func TestReviewScreen_ViewShowsChoices(t *testing.T) {
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
 	view := screen.View()
-	assert.Contains(t, view, "Cancel")
 	assert.Contains(t, view, "Apply")
-	assert.Contains(t, view, "Apply changes?")
+	assert.Contains(t, view, "Cancel")
 }
 
 func TestReviewScreen_StatusHints(t *testing.T) {
@@ -306,7 +305,15 @@ func TestReviewScreen_WindowSizeMsg(t *testing.T) {
 }
 
 func TestScopeLabel(t *testing.T) {
-	assert.Equal(t, "user", scopeLabel(targetpkg.ConfigScopeUser))
-	assert.Equal(t, "project", scopeLabel(targetpkg.ConfigScopeProject))
+	assert.Equal(t, "User (for targets that support it)", scopeLabel(targetpkg.ConfigScopeUser))
+	assert.Equal(t, "Project (current directory only)", scopeLabel(targetpkg.ConfigScopeProject))
 	assert.Equal(t, "effective", scopeLabel(targetpkg.ConfigScope("effective")))
+}
+
+func TestReviewScreen_ViewShowsServiceWithEmDash(t *testing.T) {
+	theme := NewTheme()
+	screen := NewReviewScreen(theme, testReviewState(), false)
+
+	view := screen.View()
+	assert.Contains(t, view, "sentry \u2014 Error tracking")
 }

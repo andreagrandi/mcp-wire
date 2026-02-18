@@ -14,9 +14,9 @@ type sourceOption struct {
 }
 
 var sourceOptions = []sourceOption{
-	{Label: "Curated services", Description: "Bundled with mcp-wire (recommended)", Value: "curated"},
-	{Label: "Registry services", Description: "Community MCP Registry", Value: "registry"},
-	{Label: "Both", Description: "Curated and registry combined", Value: "all"},
+	{Label: "Curated services", Description: "recommended, maintained by mcp-wire", Value: "curated"},
+	{Label: "Registry services", Description: "community-published MCP servers", Value: "registry"},
+	{Label: "Both", Description: "curated + registry combined", Value: "all"},
 }
 
 // SourceScreen lets the user choose the service source.
@@ -66,22 +66,20 @@ func (s *SourceScreen) View() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
+	b.WriteString("  Where should mcp-wire look for services?\n\n")
 
 	for i, opt := range sourceOptions {
+		desc := s.theme.Dim.Render(opt.Description)
 		if i == s.cursor {
 			label := "  \u276f " + opt.Label
 			if s.width > 0 {
-				b.WriteString(s.theme.Highlight.Width(s.width).Render(label))
+				b.WriteString(s.theme.Highlight.Width(s.width).Render(label + "    " + opt.Description))
 			} else {
-				b.WriteString(s.theme.Cursor.Render(label))
+				b.WriteString(s.theme.Cursor.Render(label) + "    " + desc)
 			}
 		} else {
-			b.WriteString("    " + opt.Label)
+			b.WriteString("    " + opt.Label + "    " + desc)
 		}
-		b.WriteString("\n")
-
-		// Description line (indented, dimmed).
-		b.WriteString(s.theme.Dim.Render("      " + opt.Description))
 		b.WriteString("\n")
 	}
 

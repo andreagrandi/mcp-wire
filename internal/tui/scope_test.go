@@ -12,20 +12,20 @@ import (
 
 func TestNewScopeScreen(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	assert.Equal(t, 0, screen.Cursor())
 }
 
 func TestScopeScreen_Init(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 	assert.Nil(t, screen.Init())
 }
 
 func TestScopeScreen_NavigateDown(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyDown})
 	updated := s.(*ScopeScreen)
@@ -34,7 +34,7 @@ func TestScopeScreen_NavigateDown(t *testing.T) {
 
 func TestScopeScreen_NavigateUp(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	var s Screen = screen
 	s, _ = s.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -45,7 +45,7 @@ func TestScopeScreen_NavigateUp(t *testing.T) {
 
 func TestScopeScreen_NavigateUpAtTop(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyUp})
 	updated := s.(*ScopeScreen)
@@ -54,7 +54,7 @@ func TestScopeScreen_NavigateUpAtTop(t *testing.T) {
 
 func TestScopeScreen_NavigateDownAtBottom(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	var s Screen = screen
 	for i := 0; i < 10; i++ {
@@ -66,7 +66,7 @@ func TestScopeScreen_NavigateDownAtBottom(t *testing.T) {
 
 func TestScopeScreen_VimKeys(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	updated := s.(*ScopeScreen)
@@ -79,7 +79,7 @@ func TestScopeScreen_VimKeys(t *testing.T) {
 
 func TestScopeScreen_EnterSelectsUser(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.NotNil(t, cmd)
@@ -92,7 +92,7 @@ func TestScopeScreen_EnterSelectsUser(t *testing.T) {
 
 func TestScopeScreen_EnterSelectsProject(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	s, _ := screen.Update(tea.KeyMsg{Type: tea.KeyDown})
 	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -106,7 +106,7 @@ func TestScopeScreen_EnterSelectsProject(t *testing.T) {
 
 func TestScopeScreen_EscSendsBack(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	require.NotNil(t, cmd)
@@ -118,7 +118,7 @@ func TestScopeScreen_EscSendsBack(t *testing.T) {
 
 func TestScopeScreen_ViewContainsOptions(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	view := screen.View()
 	assert.Contains(t, view, "User")
@@ -127,16 +127,32 @@ func TestScopeScreen_ViewContainsOptions(t *testing.T) {
 
 func TestScopeScreen_ViewContainsDescriptions(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	view := screen.View()
-	assert.Contains(t, view, "user/global configuration")
-	assert.Contains(t, view, "current project only")
+	assert.Contains(t, view, "available across all projects")
+	assert.Contains(t, view, "only for the current directory")
+}
+
+func TestScopeScreen_ViewContainsHeading(t *testing.T) {
+	theme := NewTheme()
+	screen := NewScopeScreen(theme, "Claude Code")
+
+	view := screen.View()
+	assert.Contains(t, view, "Install scope for targets that support it (Claude Code):")
+}
+
+func TestScopeScreen_ViewContainsFooter(t *testing.T) {
+	theme := NewTheme()
+	screen := NewScopeScreen(theme, "Claude Code")
+
+	view := screen.View()
+	assert.Contains(t, view, "Targets without scope support will use their default behavior.")
 }
 
 func TestScopeScreen_StatusHints(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	hints := screen.StatusHints()
 	assert.Len(t, hints, 3)
@@ -152,7 +168,7 @@ func TestScopeScreen_StatusHints(t *testing.T) {
 
 func TestScopeScreen_WindowSizeMsg(t *testing.T) {
 	theme := NewTheme()
-	screen := NewScopeScreen(theme)
+	screen := NewScopeScreen(theme, "Claude Code")
 
 	s, _ := screen.Update(tea.WindowSizeMsg{Width: 80, Height: 40})
 	updated := s.(*ScopeScreen)

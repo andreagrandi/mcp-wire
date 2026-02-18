@@ -150,9 +150,10 @@ func TestApplyScreen_ViewRunning(t *testing.T) {
 	screen.Init()
 
 	view := screen.View()
-	assert.Contains(t, view, "Installing to targets...")
+	assert.Contains(t, view, "Installing sentry")
 	assert.Contains(t, view, "Claude Code")
 	assert.Contains(t, view, "configuring...")
+	assert.Contains(t, view, "please wait")
 }
 
 func TestApplyScreen_ViewRunningUninstall(t *testing.T) {
@@ -163,7 +164,7 @@ func TestApplyScreen_ViewRunningUninstall(t *testing.T) {
 	screen.Init()
 
 	view := screen.View()
-	assert.Contains(t, view, "Removing from targets...")
+	assert.Contains(t, view, "Removing sentry")
 	assert.Contains(t, view, "removing...")
 }
 
@@ -178,7 +179,7 @@ func TestApplyScreen_ViewDoneSuccess(t *testing.T) {
 	updated = s.(*ApplyScreen)
 
 	view := updated.View()
-	assert.Contains(t, view, "Install complete!")
+	assert.Contains(t, view, "sentry installed successfully")
 	assert.Contains(t, view, "configured")
 	assert.Contains(t, view, "mcp-wire install sentry")
 	assert.Contains(t, view, "Install another")
@@ -199,7 +200,7 @@ func TestApplyScreen_ViewDoneUninstall(t *testing.T) {
 	updated = s.(*ApplyScreen)
 
 	view := updated.View()
-	assert.Contains(t, view, "Uninstall complete!")
+	assert.Contains(t, view, "sentry removed successfully")
 	assert.Contains(t, view, "removed")
 	assert.Contains(t, view, "Uninstall another")
 }
@@ -215,7 +216,7 @@ func TestApplyScreen_ViewDoneWithErrors(t *testing.T) {
 	updated = s.(*ApplyScreen)
 
 	view := updated.View()
-	assert.Contains(t, view, "Completed with errors")
+	assert.Contains(t, view, "sentry partially installed")
 	assert.Contains(t, view, "disk full")
 }
 
@@ -230,7 +231,7 @@ func TestApplyScreen_ViewAllFailed(t *testing.T) {
 	updated = s.(*ApplyScreen)
 
 	view := updated.View()
-	assert.Contains(t, view, "Operation failed")
+	assert.Contains(t, view, "sentry failed")
 }
 
 func TestApplyScreen_PostActionNavigation(t *testing.T) {
@@ -785,7 +786,7 @@ func TestApplyScreen_CredCleanupViewShowsPrompt(t *testing.T) {
 	assert.Contains(t, view, "Remove stored credentials?")
 	assert.Contains(t, view, "No")
 	assert.Contains(t, view, "Yes")
-	assert.Contains(t, view, "Uninstall complete!")
+	assert.Contains(t, view, "sentry removed successfully")
 }
 
 func TestApplyScreen_CredCleanupMsgInDoneView(t *testing.T) {

@@ -150,9 +150,17 @@ func TestSourceScreen_ViewContainsDescriptions(t *testing.T) {
 	screen := NewSourceScreen(theme)
 
 	view := screen.View()
-	assert.Contains(t, view, "Bundled with mcp-wire")
-	assert.Contains(t, view, "Community MCP Registry")
-	assert.Contains(t, view, "Curated and registry combined")
+	assert.Contains(t, view, "recommended, maintained by mcp-wire")
+	assert.Contains(t, view, "community-published MCP servers")
+	assert.Contains(t, view, "curated + registry combined")
+}
+
+func TestSourceScreen_ViewContainsQuestionHeader(t *testing.T) {
+	theme := NewTheme()
+	screen := NewSourceScreen(theme)
+
+	view := screen.View()
+	assert.Contains(t, view, "Where should mcp-wire look for services?")
 }
 
 func TestSourceScreen_StatusHints(t *testing.T) {
