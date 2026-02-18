@@ -2,43 +2,32 @@
 
 ## [Unreleased]
 
+## v0.2.0 - 2026-02-18
+
 ### Added
-- Full-screen Bubble Tea TUI behind the `tui` feature flag, replacing the survey-based interactive UI (in progress). Completed screens: main menu with output viewer (8.0–8.1), source selection (8.2), live-filtered service selection with async catalog loading and registry sync status polling (8.3), registry trust warning with metadata display and explicit confirmation (8.4), target multi-select with scope selection (8.5), review summary with equivalent command and Apply/Cancel confirmation (8.6), credential prompting with apply progress (8.7), and post-uninstall credential removal prompt (8.8).
-- TUI trust screen now shows ⚠ warning header, service name and description, remote URL in cyan, caution text, and descriptive choice labels ("No, go back" / "Yes, proceed"). Target multi-select defaults to none pre-checked.
-- All TUI screens aligned with design mockups: source screen has question header and inline descriptions, service screen uses colon-style search prompt with end-of-results marker and type-to-filter hint, scope screen shows heading with target names and footer note, review screen uses em-dash service labels with Apply-first choice order and inline command, apply screen shows service name in progress headers with per-state icons and retry option on failure.
+- Full-screen Bubble Tea TUI replacing the survey-based interactive UI. Screens: main menu, source selection, live-filtered service selection with async catalog loading and registry sync status polling, registry trust warning with metadata display and explicit confirmation, target multi-select with scope selection, review summary with equivalent command and Apply/Cancel confirmation, credential prompting with apply progress, and post-uninstall credential removal prompt.
 - TUI credential screen prompts for unresolved env vars sequentially with masked input, setup URL/hint display, Ctrl+O to open URLs, and optional save-to-credential-store prompt.
 - TUI apply screen shows per-target install/uninstall progress with status indicators (pending/running/done/failed), equivalent command output, OAuth manual auth hints, and post-completion navigation (Install another / Back to menu / Exit).
-- TUI uninstall flow now prompts to remove stored credentials after successful uninstall, matching the CLI's post-uninstall credential cleanup behavior.
 - Registry cache now syncs in the background on CLI startup (when the registry feature is enabled), so registry flows can start from cached results and refresh incrementally without blocking command execution.
 - Added `mcp-wire cache clear` to remove the local registry cache file and recover quickly from stale/corrupt cache state.
 - Registry entries with package-based install methods (`npm`, `pypi`, `docker`/`oci`, `nuget`, `mcpb`) can now be installed end-to-end as stdio services, mapping registry package metadata into command + args configs.
 - Selecting a registry entry now fetches the latest version details from the `versions/latest` API endpoint, ensuring installs always use the most recent package version and metadata.
 - Explicit install path (`mcp-wire install <name>`) now falls back to the registry catalog when no curated service matches, enabling direct reinstall of registry entries from guided-mode equivalent commands.
 - Package runtime arguments with input-style variables (named args without literal values) now create env var placeholders that are prompted and substituted at install time.
-- Registry package entries with multiple packages now fall back to the first supported registry type instead of failing when the first package is unsupported.
-- Trust/safety summary for registry entries now shows package type, versioned identifier, and runtime hint when the entry uses package-based install.
-- Install and uninstall wizards now include a source selection step (Curated, Registry, Both) when the registry feature is enabled, in both plain and survey UIs.
-- `list services --source all` now marks curated entries with a `*` prefix and prints a legend line; single-source views show no markers.
-- `--source` flag on `list services` is now visible in help output when the registry feature is enabled, and hidden otherwise.
-- Selecting a registry service now shows a trust/safety summary (source, install type, transport, required secrets, repository URL) and requires explicit confirmation before proceeding, in both plain and survey UIs.
 - Registry entries with `streamable-http` or `sse` remotes can now be installed end-to-end: URL/header variable prompting, placeholder substitution, and per-target config generation.
 - `Service` model now carries explicit `Headers` (for registry remote header templates) and `EnvVar.Default` (for variable defaults from the registry schema).
 - Claude Code target emits a `headers` map in server config when explicit headers are defined.
 - OpenCode target uses explicit `svc.Headers` for registry remotes instead of deriving headers from resolved env vars.
-- Codex target skips `bearer_token_env_var` for registry remotes (where env vars are URL/header substitution variables, not bearer tokens).
 - `--no-prompt` mode now silently applies default values for required and optional env vars, enabling non-interactive installs of registry services with defaulted variables.
-- Optional env vars with defaults are populated into resolved env so URL/header substitution can use them.
 
 ### Removed
-- Removed `status`, `list services`, and `list targets` CLI commands and their TUI menu entries. The status command only showed curated YAML services (not all installed servers), making it misleading. The list commands were low-value informational views. The guided menu now shows only Install, Uninstall, and Exit.
+- Removed `status`, `list services`, and `list targets` CLI commands and their TUI menu entries. The guided menu now shows only Install, Uninstall, and Exit.
+- Removed `AlecAivazis/survey/v2` dependency and all survey-based UI code, completing the transition to the Bubble Tea TUI.
 
 ### Changed
-- Registry survey service picker UX was reworked to improve discoverability: it now uses a clearer filter prompt, keeps list focus behavior predictable, avoids noisy repeated hint lines, and handles initial empty-filter state more cleanly.
-- Registry sync progress in survey mode is now shown as a single inline-updating status line during initial sync waits instead of printing a new line per progress update.
-- Selecting a registry service in the install/uninstall wizard shows a rejection message and returns to source selection instead of looping indefinitely.
-- Catalog display in wizards and `list services` uses `*` curated markers instead of `[registry]` suffix tags when showing mixed sources.
-- Registry rejection message for entries with no supported install method now reads "no supported install method" instead of the package-specific message, since both remote and package paths are now attempted.
-- Duplicate env vars from URL variables and header variables are now merged with OR on `Required`, matching the existing `envVarsFromRegistry` dedup pattern.
+- Registry service picker UX reworked for discoverability: clearer filter prompt, predictable list focus, and cleaner empty-filter handling.
+- Registry rejection message for entries with no supported install method now reads "no supported install method" instead of the package-specific message.
+- Duplicate env vars from URL and header variables are now merged with OR on `Required`.
 - `applyRegistrySubstitutions` now substitutes `{varName}` placeholders in service args (for package-based installs) in addition to URL and headers.
 
 ## v0.1.3 - 2026-02-14
