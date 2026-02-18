@@ -10,6 +10,8 @@ import (
 	"github.com/andreagrandi/mcp-wire/internal/app"
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
 	"github.com/andreagrandi/mcp-wire/internal/config"
+	"github.com/andreagrandi/mcp-wire/internal/credential"
+	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 	"github.com/andreagrandi/mcp-wire/internal/tui"
 	"github.com/spf13/cobra"
@@ -146,7 +148,43 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 		CatalogEntryToService: catalogEntryToService,
 		AllTargets:            allTargets,
 		RegistryEnabled:       registryEnabled,
+
+		ResolveCredential: tuiResolveCredential,
+		StoreCredential:   tuiStoreCredential,
+		InstallTarget:     tuiInstallTarget,
+		UninstallTarget:   tuiUninstallTarget,
+		ServiceUsesOAuth:  serviceUsesOAuth,
+		OAuthManualHint:   oauthManualAuthHint,
+		OpenURL:           openSetupURL,
 	}
+}
+
+func tuiResolveCredential(envName string) (string, string, bool) {
+	envSource := newCredentialEnvSource()
+	fileSource := newCredentialFileSource("")
+	resolver := newCredentialResolver(envSource, fileSource)
+	return resolver.Resolve(envName)
+}
+
+func tuiStoreCredential(envName, value string) error {
+	fileSource := credential.NewFileSource("")
+	return fileSource.Store(envName, value)
+}
+
+func tuiInstallTarget(svc service.Service, env map[string]string, t targetpkg.Target, scope targetpkg.ConfigScope) error {
+	scopedTarget, supportsScopes := t.(targetpkg.ScopedTarget)
+	if supportsScopes && targetSupportsScope(t, scope) {
+		return scopedTarget.InstallWithScope(svc, env, scope)
+	}
+	return t.Install(svc, env)
+}
+
+func tuiUninstallTarget(name string, t targetpkg.Target, scope targetpkg.ConfigScope) error {
+	scopedTarget, supportsScopes := t.(targetpkg.ScopedTarget)
+	if supportsScopes && targetSupportsScope(t, scope) {
+		return scopedTarget.UninstallWithScope(name, scope)
+	}
+	return t.Uninstall(name)
 }
 
 func readTrimmedLine(reader *bufio.Reader, output io.Writer, prompt string) (string, error) {

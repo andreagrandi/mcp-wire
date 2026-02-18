@@ -912,7 +912,7 @@ Summary of all selections: Source, Service, Targets, Scope, Credentials mode. Sh
 
 Acceptance: Review shows correct summary. Apply proceeds to execution.
 
-### 8.7 — Apply + Credentials (Screen 7) — second hardest
+### 8.7 — Apply + Credentials (Screen 7) — second hardest ✅
 
 Credential prompting in TUI:
 

@@ -1029,16 +1029,15 @@ func navigateToReview(t *testing.T, cb Callbacks) WizardModel {
 	return wm
 }
 
-func TestWizardModel_ReviewApplyGoesToPlaceholder(t *testing.T) {
+func TestWizardModel_ReviewApplyGoesToApplyScreen(t *testing.T) {
 	wm := navigateToReview(t, testCallbacks())
 
 	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
 	wm = updated.(WizardModel)
 
-	// Apply goes to apply placeholder (OutputScreen).
-	_, isOutput := wm.screen.(*OutputScreen)
-	assert.True(t, isOutput)
-	assert.Contains(t, wm.screen.View(), "mcp-wire install sentry")
+	// Apply goes to the apply screen.
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
 }
 
 func TestWizardModel_ReviewCancelGoesBackToTarget(t *testing.T) {
@@ -1124,4 +1123,345 @@ func TestWizardModel_ReviewUninstallFlow(t *testing.T) {
 	assert.Contains(t, view, "Uninstall")
 	assert.Contains(t, view, "mcp-wire uninstall sentry")
 	assert.NotContains(t, view, "Credentials")
+}
+
+// --- Credential and Apply screen integration tests ---
+
+func testCallbacksWithCredentials() Callbacks {
+	cb := testCallbacks()
+	cb.CatalogEntryToService = func(e catalog.Entry) (service.Service, bool) {
+		if e.Curated != nil {
+			return *e.Curated, true
+		}
+		return service.Service{}, false
+	}
+	cb.ResolveCredential = func(envName string) (string, string, bool) {
+		return "", "", false // nothing pre-resolved
+	}
+	cb.InstallTarget = func(_ service.Service, _ map[string]string, _ targetpkg.Target, _ targetpkg.ConfigScope) error {
+		return nil
+	}
+	cb.UninstallTarget = func(_ string, _ targetpkg.Target, _ targetpkg.ConfigScope) error {
+		return nil
+	}
+	return cb
+}
+
+func navigateToReviewWithEnvVars(t *testing.T) WizardModel {
+	t.Helper()
+	cb := testCallbacksWithCredentials()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{
+		Name:        "sentry",
+		Description: "Error tracking",
+		Env: []service.EnvVar{
+			{Name: "SENTRY_TOKEN", Description: "Auth token", Required: true},
+		},
+	}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	_, isReview := wm.screen.(*ReviewScreen)
+	require.True(t, isReview)
+	return wm
+}
+
+func TestWizardModel_ReviewApplyWithCredentials(t *testing.T) {
+	wm := navigateToReviewWithEnvVars(t)
+
+	// Apply → should go to credential screen (unresolved env var).
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isCred := wm.screen.(*CredentialScreen)
+	assert.True(t, isCred)
+}
+
+func TestWizardModel_CredentialDoneGoesToApply(t *testing.T) {
+	wm := navigateToReviewWithEnvVars(t)
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isCred := wm.screen.(*CredentialScreen)
+	require.True(t, isCred)
+
+	// Simulate credential done.
+	resolved := map[string]string{"SENTRY_TOKEN": "tok123"}
+	updated, _ = wm.Update(credentialDoneMsg{resolvedEnv: resolved})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
+	assert.Equal(t, "tok123", wm.state.ResolvedEnv["SENTRY_TOKEN"])
+}
+
+func TestWizardModel_NoCredentialsNeeded_SkipsToApply(t *testing.T) {
+	cb := testCallbacksWithCredentials()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	// Service with no env vars.
+	svc := service.Service{Name: "context7", Description: "Docs MCP"}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Apply → should skip credentials and go directly to apply.
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
+}
+
+func TestWizardModel_PreResolvedCredentials_SkipsToApply(t *testing.T) {
+	cb := testCallbacksWithCredentials()
+	cb.ResolveCredential = func(envName string) (string, string, bool) {
+		if envName == "SENTRY_TOKEN" {
+			return "pre-resolved-tok", "env", true
+		}
+		return "", "", false
+	}
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{
+		Name: "sentry",
+		Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
+	}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Apply → should skip credentials (already resolved).
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
+	assert.Equal(t, "pre-resolved-tok", wm.state.ResolvedEnv["SENTRY_TOKEN"])
+}
+
+func TestWizardModel_UninstallSkipsCredentials(t *testing.T) {
+	cb := testCallbacksWithCredentials()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{
+		Name: "sentry",
+		Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
+	}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Apply → uninstall should skip credentials entirely.
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
+}
+
+func TestWizardModel_BackFromCredentials(t *testing.T) {
+	wm := navigateToReviewWithEnvVars(t)
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isCred := wm.screen.(*CredentialScreen)
+	require.True(t, isCred)
+
+	// Back from credentials goes to review.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isReview := wm.screen.(*ReviewScreen)
+	assert.True(t, isReview)
+	assert.Nil(t, wm.state.ResolvedEnv)
+}
+
+func TestWizardModel_BackFromApplyBlocked(t *testing.T) {
+	cb := testCallbacksWithCredentials()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{Name: "context7"}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	require.True(t, isApply)
+
+	// Back from apply should be blocked (still apply screen).
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, stillApply := wm.screen.(*ApplyScreen)
+	assert.True(t, stillApply)
+}
+
+func TestWizardModel_ApplyPostActionAnother(t *testing.T) {
+	wm := navigateToReview(t, testCallbacksWithCredentials())
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	// "Another" restarts wizard.
+	updated, _ = wm.Update(applyPostActionMsg{action: "another"})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
+	assert.Equal(t, "install", wm.state.Action)
+}
+
+func TestWizardModel_ApplyPostActionMenu(t *testing.T) {
+	wm := navigateToReview(t, testCallbacksWithCredentials())
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	// "Menu" goes back to main menu.
+	updated, _ = wm.Update(applyPostActionMsg{action: "menu"})
+	wm = updated.(WizardModel)
+
+	_, isMenu := wm.screen.(*MenuScreen)
+	assert.True(t, isMenu)
+	assert.Empty(t, wm.state.Action)
+}
+
+func TestWizardModel_ApplyPostActionExit(t *testing.T) {
+	wm := navigateToReview(t, testCallbacksWithCredentials())
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	// "Exit" sends quit.
+	_, cmd := wm.Update(applyPostActionMsg{action: "exit"})
+	require.NotNil(t, cmd)
+
+	msg := cmd()
+	_, ok := msg.(tea.QuitMsg)
+	assert.True(t, ok)
+}
+
+func TestWizardModel_ConvertEntryFails_ShowsError(t *testing.T) {
+	cb := testCallbacks()
+	cb.CatalogEntryToService = func(_ catalog.Entry) (service.Service, bool) {
+		return service.Service{}, false
+	}
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	entry := catalog.FromCurated(service.Service{Name: "broken"})
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Apply → conversion fails → error output.
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isOutput := wm.screen.(*OutputScreen)
+	assert.True(t, isOutput)
+	assert.Contains(t, wm.screen.View(), "Cannot resolve service definition")
+}
+
+func TestWizardModel_CredentialBreadcrumb(t *testing.T) {
+	wm := navigateToReviewWithEnvVars(t)
+
+	updated, _ := wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isCred := wm.screen.(*CredentialScreen)
+	require.True(t, isCred)
+
+	// Should have Credentials breadcrumb.
+	found := false
+	for _, step := range wm.steps {
+		if step.Label == "Credentials" && step.Active {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected active Credentials breadcrumb")
+}
+
+func TestWizardModel_ApplyBreadcrumb(t *testing.T) {
+	cb := testCallbacksWithCredentials()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Install service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{Name: "context7"}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	// Should have Apply breadcrumb.
+	found := false
+	for _, step := range wm.steps {
+		if step.Label == "Apply" && step.Active {
+			found = true
+		}
+	}
+	assert.True(t, found, "expected active Apply breadcrumb")
 }

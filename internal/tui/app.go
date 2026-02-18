@@ -25,15 +25,30 @@ type Callbacks struct {
 	CatalogEntryToService func(catalog.Entry) (service.Service, bool)
 	AllTargets            func() []targetpkg.Target
 	RegistryEnabled       bool
+
+	// Credential resolution.
+	ResolveCredential func(envName string) (value, source string, found bool)
+	StoreCredential   func(envName, value string) error
+
+	// Apply operations.
+	InstallTarget    func(svc service.Service, env map[string]string, t targetpkg.Target, scope targetpkg.ConfigScope) error
+	UninstallTarget  func(name string, t targetpkg.Target, scope targetpkg.ConfigScope) error
+	ServiceUsesOAuth func(svc service.Service) bool
+	OAuthManualHint  func(t targetpkg.Target) string
+
+	// URL opening.
+	OpenURL func(url string) error
 }
 
 // WizardState holds the accumulated selections across wizard screens.
 type WizardState struct {
-	Action  string                // "install" or "uninstall"
-	Source  string                // "curated", "registry", "all"
-	Entry   catalog.Entry         // selected service
-	Targets []targetpkg.Target    // selected targets
-	Scope   targetpkg.ConfigScope // "user" or "project"
+	Action      string                // "install" or "uninstall"
+	Source      string                // "curated", "registry", "all"
+	Entry       catalog.Entry         // selected service
+	Targets     []targetpkg.Target    // selected targets
+	Scope       targetpkg.ConfigScope // "user" or "project"
+	Service     service.Service       // resolved service definition
+	ResolvedEnv map[string]string     // resolved credential values
 }
 
 // WizardModel is the root Bubble Tea model for the full-screen TUI.
@@ -95,6 +110,12 @@ func (m WizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case reviewConfirmMsg:
 		return m.handleReviewConfirm(msg)
+
+	case credentialDoneMsg:
+		return m.handleCredentialDone(msg)
+
+	case applyPostActionMsg:
+		return m.handleApplyPostAction(msg)
 
 	case BackMsg:
 		return m.handleBack()
@@ -334,7 +355,136 @@ func (m WizardModel) handleReviewConfirm(msg reviewConfirmMsg) (tea.Model, tea.C
 		return m.reviewGoBack()
 	}
 
-	return m.showApplyPlaceholder()
+	// Convert catalog entry to service.
+	svc, ok := m.convertEntryToService()
+	if !ok {
+		content := "Cannot resolve service definition.\n" +
+			"No supported install method found for " + m.state.Entry.Name + ".\n"
+		m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
+		return m, m.screen.Init()
+	}
+	m.state.Service = svc
+
+	// For uninstall, skip credentials and go directly to apply.
+	if m.state.Action == "uninstall" {
+		m.state.ResolvedEnv = nil
+		return m.showApplyScreen()
+	}
+
+	// Resolve credentials from existing sources.
+	resolvedEnv, unresolvedVars := m.resolveExistingCredentials(svc)
+	m.state.ResolvedEnv = resolvedEnv
+
+	if len(unresolvedVars) > 0 {
+		return m.showCredentialScreen(unresolvedVars)
+	}
+
+	return m.showApplyScreen()
+}
+
+// convertEntryToService converts the selected catalog entry to a service.Service.
+func (m WizardModel) convertEntryToService() (service.Service, bool) {
+	if m.callbacks.CatalogEntryToService != nil {
+		return m.callbacks.CatalogEntryToService(m.state.Entry)
+	}
+	// Curated entry with direct service reference.
+	if m.state.Entry.Curated != nil {
+		return *m.state.Entry.Curated, true
+	}
+	return service.Service{}, false
+}
+
+// resolveExistingCredentials checks which env vars are already resolved and
+// returns the resolved values and the list of unresolved required vars.
+func (m WizardModel) resolveExistingCredentials(svc service.Service) (map[string]string, []service.EnvVar) {
+	resolvedEnv := make(map[string]string)
+	var unresolvedVars []service.EnvVar
+
+	for _, ev := range svc.Env {
+		name := strings.TrimSpace(ev.Name)
+		if name == "" {
+			continue
+		}
+
+		if m.callbacks.ResolveCredential != nil {
+			value, _, found := m.callbacks.ResolveCredential(name)
+			if found {
+				resolvedEnv[name] = value
+				continue
+			}
+		}
+
+		if ev.Required {
+			unresolvedVars = append(unresolvedVars, ev)
+		} else if defaultVal := strings.TrimSpace(ev.Default); defaultVal != "" {
+			resolvedEnv[name] = defaultVal
+		}
+	}
+
+	return resolvedEnv, unresolvedVars
+}
+
+func (m WizardModel) showCredentialScreen(unresolvedVars []service.EnvVar) (tea.Model, tea.Cmd) {
+	steps := m.reviewBreadcrumbs()
+	steps = append(steps, BreadcrumbStep{
+		Label: "Credentials", Active: true, Visible: true,
+	})
+	m.steps = steps
+
+	m.screen = NewCredentialScreen(
+		m.theme,
+		unresolvedVars,
+		m.state.ResolvedEnv,
+		m.callbacks.StoreCredential,
+		m.callbacks.OpenURL,
+	)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleCredentialDone(msg credentialDoneMsg) (tea.Model, tea.Cmd) {
+	m.state.ResolvedEnv = msg.resolvedEnv
+
+	// Apply registry substitutions to the service.
+	applySubstitutions(&m.state.Service, m.state.ResolvedEnv)
+
+	return m.showApplyScreen()
+}
+
+func (m WizardModel) showApplyScreen() (tea.Model, tea.Cmd) {
+	steps := m.reviewBreadcrumbs()
+	steps = append(steps, BreadcrumbStep{
+		Label: "Apply", Active: true, Visible: true,
+	})
+	m.steps = steps
+
+	m.screen = NewApplyScreen(
+		m.theme,
+		m.state,
+		m.state.Service,
+		m.state.ResolvedEnv,
+		ApplyCallbacks{
+			InstallTarget:    m.callbacks.InstallTarget,
+			UninstallTarget:  m.callbacks.UninstallTarget,
+			ServiceUsesOAuth: m.callbacks.ServiceUsesOAuth,
+			OAuthManualHint:  m.callbacks.OAuthManualHint,
+		},
+	)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) handleApplyPostAction(msg applyPostActionMsg) (tea.Model, tea.Cmd) {
+	switch msg.action {
+	case "another":
+		return m.startWizard(m.state.Action)
+	case "exit":
+		return m, tea.Quit
+	default:
+		// "menu" or unknown — return to menu.
+		m.screen = NewMenuScreen(m.theme)
+		m.state = WizardState{}
+		m.steps = nil
+		return m, m.screen.Init()
+	}
 }
 
 // reviewGoBack navigates back from the review screen to the previous step.
@@ -347,16 +497,19 @@ func (m WizardModel) reviewGoBack() (tea.Model, tea.Cmd) {
 	return m.showTargetScreen()
 }
 
-// showApplyPlaceholder shows a placeholder for the apply screen
-// (to be replaced in step 8.7).
-func (m WizardModel) showApplyPlaceholder() (tea.Model, tea.Cmd) {
-	m.steps = m.reviewBreadcrumbs()
-
-	content := "Apply is not yet available in the TUI.\n" +
-		"Use the command directly:\n\n" +
-		"  mcp-wire " + m.state.Action + " " + m.state.Entry.Name + "\n"
-	m.screen = NewOutputScreen(m.theme, content, m.contentHeight())
-	return m, m.screen.Init()
+// applySubstitutions replaces {VAR} placeholders in the service URL, headers,
+// and args with resolved credential values.
+func applySubstitutions(svc *service.Service, resolvedEnv map[string]string) {
+	for name, value := range resolvedEnv {
+		placeholder := "{" + name + "}"
+		svc.URL = strings.ReplaceAll(svc.URL, placeholder, value)
+		for hdr, tmpl := range svc.Headers {
+			svc.Headers[hdr] = strings.ReplaceAll(tmpl, placeholder, value)
+		}
+		for i, arg := range svc.Args {
+			svc.Args[i] = strings.ReplaceAll(arg, placeholder, value)
+		}
+	}
 }
 
 // reviewBreadcrumbs builds the breadcrumb steps for the review screen.
@@ -415,6 +568,16 @@ func anyTargetSupportsProjectScope(targets []targetpkg.Target) bool {
 
 func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 	switch m.screen.(type) {
+	case *ApplyScreen:
+		// Cannot go back from apply (operations may have started).
+		return m, nil
+
+	case *CredentialScreen:
+		// Back from credentials goes to review, clearing resolved state.
+		m.state.ResolvedEnv = nil
+		m.state.Service = service.Service{}
+		return m.showReviewScreen()
+
 	case *ReviewScreen:
 		return m.reviewGoBack()
 

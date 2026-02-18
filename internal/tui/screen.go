@@ -18,6 +18,7 @@ const (
 	ScreenTarget
 	ScreenScope
 	ScreenReview
+	ScreenCredential
 	ScreenApply
 )
 

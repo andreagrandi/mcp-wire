@@ -3,7 +3,9 @@
 ## [Unreleased]
 
 ### Added
-- Full-screen Bubble Tea TUI behind the `tui` feature flag, replacing the survey-based interactive UI (in progress). Completed screens: main menu with output viewer (8.0–8.1), source selection (8.2), live-filtered service selection with async catalog loading and registry sync status polling (8.3), registry trust warning with metadata display and explicit confirmation (8.4), target multi-select with scope selection (8.5), and review summary with equivalent command and Apply/Cancel confirmation (8.6).
+- Full-screen Bubble Tea TUI behind the `tui` feature flag, replacing the survey-based interactive UI (in progress). Completed screens: main menu with output viewer (8.0–8.1), source selection (8.2), live-filtered service selection with async catalog loading and registry sync status polling (8.3), registry trust warning with metadata display and explicit confirmation (8.4), target multi-select with scope selection (8.5), review summary with equivalent command and Apply/Cancel confirmation (8.6), and credential prompting with apply progress (8.7).
+- TUI credential screen prompts for unresolved env vars sequentially with masked input, setup URL/hint display, Ctrl+O to open URLs, and optional save-to-credential-store prompt.
+- TUI apply screen shows per-target install/uninstall progress with status indicators (pending/running/done/failed), equivalent command output, OAuth manual auth hints, and post-completion navigation (Install another / Back to menu / Exit).
 - Registry cache now syncs in the background on CLI startup (when the registry feature is enabled), so registry flows can start from cached results and refresh incrementally without blocking command execution.
 - Added `mcp-wire cache clear` to remove the local registry cache file and recover quickly from stale/corrupt cache state.
 - Registry entries with package-based install methods (`npm`, `pypi`, `docker`/`oci`, `nuget`, `mcpb`) can now be installed end-to-end as stdio services, mapping registry package metadata into command + args configs.
