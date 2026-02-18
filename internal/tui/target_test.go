@@ -71,14 +71,14 @@ func TestNewTargetScreen_InstalledFirst(t *testing.T) {
 	assert.False(t, items[2].installed)
 }
 
-func TestNewTargetScreen_InstalledPreChecked(t *testing.T) {
+func TestNewTargetScreen_NonePreChecked(t *testing.T) {
 	theme := NewTheme()
 	screen := NewTargetScreen(theme, testTargets(), nil)
 
 	items := screen.Items()
-	assert.True(t, items[0].checked)  // installed → checked
-	assert.True(t, items[1].checked)  // installed → checked
-	assert.False(t, items[2].checked) // not installed → not checked
+	assert.False(t, items[0].checked) // installed but not pre-checked
+	assert.False(t, items[1].checked) // installed but not pre-checked
+	assert.False(t, items[2].checked) // not installed
 }
 
 func TestNewTargetScreen_PreSelected(t *testing.T) {
@@ -178,7 +178,9 @@ func TestTargetScreen_SpaceTogglesOn(t *testing.T) {
 
 func TestTargetScreen_SpaceTogglesOff(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil)
+	// Pre-select targets so we can toggle off.
+	targets := testTargets()
+	screen := NewTargetScreen(theme, targets, targets[:2])
 
 	// First item is installed and pre-checked. Toggle it off.
 	_, _ = screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{' '}})
@@ -220,7 +222,9 @@ func TestTargetScreen_SelectAllInstalled(t *testing.T) {
 
 func TestTargetScreen_SelectNone(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil) // all installed pre-checked
+	// Start with installed targets selected, then deselect all.
+	targets := testTargets()
+	screen := NewTargetScreen(theme, targets, targets[:2])
 
 	screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 
@@ -231,7 +235,8 @@ func TestTargetScreen_SelectNone(t *testing.T) {
 
 func TestTargetScreen_EnterConfirmsSelection(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil)
+	targets := testTargets()
+	screen := NewTargetScreen(theme, targets, targets[:2]) // pre-select installed
 
 	_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	require.NotNil(t, cmd)
@@ -244,10 +249,7 @@ func TestTargetScreen_EnterConfirmsSelection(t *testing.T) {
 
 func TestTargetScreen_EnterDoesNothingWithNoSelection(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil)
-
-	// Deselect all.
-	screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	screen := NewTargetScreen(theme, testTargets(), nil) // none pre-checked
 
 	_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	assert.Nil(t, cmd) // no confirmation with 0 selected
@@ -280,7 +282,7 @@ func TestTargetScreen_ViewShowsCheckboxes(t *testing.T) {
 	screen := NewTargetScreen(theme, testTargets(), nil)
 
 	view := screen.View()
-	assert.Contains(t, view, "[x]")
+	assert.Contains(t, view, "[ ]")
 }
 
 func TestTargetScreen_ViewShowsNotInstalled(t *testing.T) {
@@ -293,7 +295,8 @@ func TestTargetScreen_ViewShowsNotInstalled(t *testing.T) {
 
 func TestTargetScreen_ViewShowsSelectedCount(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil)
+	targets := testTargets()
+	screen := NewTargetScreen(theme, targets, targets[:2])
 
 	view := screen.View()
 	assert.Contains(t, view, "2 target(s) selected")
@@ -301,9 +304,8 @@ func TestTargetScreen_ViewShowsSelectedCount(t *testing.T) {
 
 func TestTargetScreen_ViewShowsWarningWhenNoneSelected(t *testing.T) {
 	theme := NewTheme()
-	screen := NewTargetScreen(theme, testTargets(), nil)
+	screen := NewTargetScreen(theme, testTargets(), nil) // none pre-checked
 
-	screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	view := screen.View()
 	assert.Contains(t, view, "Select at least one target")
 }

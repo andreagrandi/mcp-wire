@@ -27,7 +27,7 @@ type TargetScreen struct {
 
 // NewTargetScreen creates a target multi-select screen.
 // allTargets is the full list of known targets. If preSelected is non-empty,
-// those targets are pre-checked; otherwise all installed targets are pre-checked.
+// those targets are pre-checked; otherwise none are pre-checked.
 func NewTargetScreen(theme Theme, allTargets []targetpkg.Target, preSelected []targetpkg.Target) *TargetScreen {
 	// Sort: installed first, then by slug.
 	sorted := make([]targetpkg.Target, len(allTargets))
@@ -52,8 +52,6 @@ func NewTargetScreen(theme Theme, allTargets []targetpkg.Target, preSelected []t
 		var checked bool
 		if len(preSelected) > 0 {
 			_, checked = preSelectedSet[t.Slug()]
-		} else {
-			checked = installed
 		}
 		items[i] = targetItem{
 			target:    t,
