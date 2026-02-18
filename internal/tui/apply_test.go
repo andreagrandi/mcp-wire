@@ -503,3 +503,334 @@ func TestApplyScreen_InvalidResultIndex(t *testing.T) {
 	assert.Nil(t, cmd)
 	assert.Equal(t, applySubStateRunning, updated.ApplySubState())
 }
+
+// --- Credential cleanup tests ---
+
+func testUninstallStateWithEnvVars() (WizardState, service.Service) {
+	svc := service.Service{
+		Name:        "sentry",
+		Description: "Error tracking",
+		Transport:   "sse",
+		URL:         "https://mcp.sentry.dev/sse",
+		Env: []service.EnvVar{
+			{Name: "SENTRY_AUTH_TOKEN", Description: "Auth token", Required: true},
+			{Name: "SENTRY_ORG", Description: "Org slug", Required: false},
+		},
+	}
+	state := WizardState{
+		Action: "uninstall",
+		Source: "curated",
+		Entry:  catalog.FromCurated(svc),
+		Targets: []targetpkg.Target{
+			&mockTarget{name: "Claude Code", slug: "claude", installed: true},
+		},
+		Scope: targetpkg.ConfigScopeUser,
+	}
+	return state, svc
+}
+
+func testApplyCallbacksWithCredRemoval() (ApplyCallbacks, *[]string) {
+	var removedNames []string
+	cb := testApplyCallbacks()
+	cb.RemoveStoredCredentials = func(envNames []string) (int, error) {
+		removedNames = append(removedNames, envNames...)
+		return len(envNames), nil
+	}
+	return cb, &removedNames
+}
+
+func finishAllTargets(screen *ApplyScreen, count int) *ApplyScreen {
+	var s Screen
+	for i := 0; i < count; i++ {
+		s, _ = screen.Update(applyResultMsg{index: i, err: nil})
+		screen = s.(*ApplyScreen)
+	}
+	return screen
+}
+
+func TestApplyScreen_UninstallWithEnvVars_ShowsCredCleanup(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	assert.Equal(t, applySubStateCredCleanup, updated.ApplySubState())
+	assert.Equal(t, 0, updated.CredCleanupCursor()) // default to No
+}
+
+func TestApplyScreen_UninstallNoEnvVars_SkipsCred(t *testing.T) {
+	theme := NewTheme()
+	state := testApplyState()
+	state.Action = "uninstall"
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	// testApplyService() has no env vars.
+	screen := NewApplyScreen(theme, state, testApplyService(), nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 2)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+}
+
+func TestApplyScreen_UninstallWithFailures_SkipsCred(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	// Target fails.
+	s, _ := screen.Update(applyResultMsg{index: 0, err: errors.New("fail")})
+	updated := s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+}
+
+func TestApplyScreen_UninstallNoCallback_SkipsCred(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks := testApplyCallbacks() // no RemoveStoredCredentials
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+}
+
+func TestApplyScreen_InstallNeverShowsCredCleanup(t *testing.T) {
+	theme := NewTheme()
+	state := testApplyState() // install action
+	svc := service.Service{
+		Name: "sentry",
+		Env:  []service.EnvVar{{Name: "TOKEN", Required: true}},
+	}
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 2)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+}
+
+func TestApplyScreen_CredCleanupCursorNavigation(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+	require.Equal(t, applySubStateCredCleanup, updated.ApplySubState())
+	assert.Equal(t, 0, updated.CredCleanupCursor()) // default No
+
+	// Move right to Yes.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 1, updated.CredCleanupCursor())
+
+	// Can't go further right.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 1, updated.CredCleanupCursor())
+
+	// Move left to No.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 0, updated.CredCleanupCursor())
+
+	// Can't go further left.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 0, updated.CredCleanupCursor())
+}
+
+func TestApplyScreen_CredCleanupVimKeys(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// 'l' moves right.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 1, updated.CredCleanupCursor())
+
+	// 'h' moves left.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	updated = s.(*ApplyScreen)
+	assert.Equal(t, 0, updated.CredCleanupCursor())
+}
+
+func TestApplyScreen_CredCleanupYes_RemovesCredentials(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, removedNames := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Move to Yes.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+
+	// Confirm.
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+	assert.Equal(t, "Stored credentials removed.", updated.CredCleanupMsg())
+	assert.Contains(t, *removedNames, "SENTRY_AUTH_TOKEN")
+	assert.Contains(t, *removedNames, "SENTRY_ORG")
+}
+
+func TestApplyScreen_CredCleanupNo_SkipsRemoval(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, removedNames := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Cursor defaults to No. Press enter.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+	assert.Empty(t, updated.CredCleanupMsg())
+	assert.Empty(t, *removedNames)
+}
+
+func TestApplyScreen_CredCleanupEsc_SkipsRemoval(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, removedNames := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Esc skips.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	updated = s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+	assert.Empty(t, updated.CredCleanupMsg())
+	assert.Empty(t, *removedNames)
+}
+
+func TestApplyScreen_CredCleanupNoneFound(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks := testApplyCallbacks()
+	callbacks.RemoveStoredCredentials = func(_ []string) (int, error) {
+		return 0, nil // no stored credentials found
+	}
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Move to Yes and confirm.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+	assert.Equal(t, "No stored credentials found.", updated.CredCleanupMsg())
+}
+
+func TestApplyScreen_CredCleanupError(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks := testApplyCallbacks()
+	callbacks.RemoveStoredCredentials = func(_ []string) (int, error) {
+		return 0, errors.New("permission denied")
+	}
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Move to Yes and confirm.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = s.(*ApplyScreen)
+
+	assert.Equal(t, applySubStateDone, updated.ApplySubState())
+	assert.Equal(t, "Error removing credentials: permission denied", updated.CredCleanupMsg())
+}
+
+func TestApplyScreen_CredCleanupViewShowsPrompt(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	view := updated.View()
+	assert.Contains(t, view, "Remove stored credentials?")
+	assert.Contains(t, view, "No")
+	assert.Contains(t, view, "Yes")
+	assert.Contains(t, view, "Uninstall complete!")
+}
+
+func TestApplyScreen_CredCleanupMsgInDoneView(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	// Choose Yes.
+	s, _ := updated.Update(tea.KeyMsg{Type: tea.KeyRight})
+	updated = s.(*ApplyScreen)
+	s, _ = updated.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	updated = s.(*ApplyScreen)
+
+	view := updated.View()
+	assert.Contains(t, view, "Stored credentials removed.")
+	assert.Contains(t, view, "Uninstall another")
+}
+
+func TestApplyScreen_CredCleanupStatusHints(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	callbacks, _ := testApplyCallbacksWithCredRemoval()
+	screen := NewApplyScreen(theme, state, svc, nil, callbacks)
+	screen.Init()
+
+	updated := finishAllTargets(screen, 1)
+
+	hints := updated.StatusHints()
+	descs := hintDescs(hints)
+	assert.Contains(t, descs, "choose")
+	assert.Contains(t, descs, "confirm")
+	assert.Contains(t, descs, "skip")
+}
+
+func TestApplyScreen_EnvVarNames(t *testing.T) {
+	theme := NewTheme()
+	state, svc := testUninstallStateWithEnvVars()
+	// Add a duplicate env var.
+	svc.Env = append(svc.Env, service.EnvVar{Name: "SENTRY_AUTH_TOKEN"})
+	screen := NewApplyScreen(theme, state, svc, nil, testApplyCallbacks())
+
+	names := screen.envVarNames()
+	assert.Equal(t, []string{"SENTRY_AUTH_TOKEN", "SENTRY_ORG"}, names)
+}

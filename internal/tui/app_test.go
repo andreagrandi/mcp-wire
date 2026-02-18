@@ -1465,3 +1465,77 @@ func TestWizardModel_ApplyBreadcrumb(t *testing.T) {
 	}
 	assert.True(t, found, "expected active Apply breadcrumb")
 }
+
+// --- Uninstall credential cleanup integration tests ---
+
+func testCallbacksWithCredRemoval() Callbacks {
+	cb := testCallbacksWithCredentials()
+	cb.RemoveStoredCredentials = func(envNames []string) (int, error) {
+		return len(envNames), nil
+	}
+	return cb
+}
+
+func TestWizardModel_UninstallWithCredCleanup(t *testing.T) {
+	cb := testCallbacksWithCredRemoval()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	svc := service.Service{
+		Name: "sentry",
+		Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
+	}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Apply.
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	require.True(t, isApply)
+
+	// Simulate target completion → should go to credential cleanup.
+	updated, _ = wm.Update(applyResultMsg{index: 0, err: nil})
+	wm = updated.(WizardModel)
+
+	applyScreen := wm.screen.(*ApplyScreen)
+	assert.Equal(t, applySubStateCredCleanup, applyScreen.ApplySubState())
+}
+
+func TestWizardModel_UninstallNoEnvVars_SkipsCredCleanup(t *testing.T) {
+	cb := testCallbacksWithCredRemoval()
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	// Service with no env vars.
+	svc := service.Service{Name: "context7"}
+	entry := catalog.FromCurated(svc)
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	// Simulate target completion → should skip cleanup (no env vars).
+	updated, _ = wm.Update(applyResultMsg{index: 0, err: nil})
+	wm = updated.(WizardModel)
+
+	applyScreen := wm.screen.(*ApplyScreen)
+	assert.Equal(t, applySubStateDone, applyScreen.ApplySubState())
+}

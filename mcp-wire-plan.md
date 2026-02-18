@@ -933,7 +933,7 @@ Modify `internal/cli/install.go` — extract `installSingleTarget()` from `execu
 
 Acceptance: Full end-to-end install with credential prompting and per-target progress.
 
-### 8.8 — Uninstall Flow
+### 8.8 — Uninstall Flow ✅
 
 Reuses most install screens. `WizardState.Action = "uninstall"` controls rendering and business logic differences in Review and Apply screens. Add post-uninstall credential removal prompt (mirrors `maybeRemoveStoredCredentials` from `uninstall.go`).
 

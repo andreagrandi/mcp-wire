@@ -36,6 +36,9 @@ type Callbacks struct {
 	ServiceUsesOAuth func(svc service.Service) bool
 	OAuthManualHint  func(t targetpkg.Target) string
 
+	// Credential cleanup (post-uninstall).
+	RemoveStoredCredentials func(envNames []string) (int, error)
+
 	// URL opening.
 	OpenURL func(url string) error
 }
@@ -463,10 +466,11 @@ func (m WizardModel) showApplyScreen() (tea.Model, tea.Cmd) {
 		m.state.Service,
 		m.state.ResolvedEnv,
 		ApplyCallbacks{
-			InstallTarget:    m.callbacks.InstallTarget,
-			UninstallTarget:  m.callbacks.UninstallTarget,
-			ServiceUsesOAuth: m.callbacks.ServiceUsesOAuth,
-			OAuthManualHint:  m.callbacks.OAuthManualHint,
+			InstallTarget:           m.callbacks.InstallTarget,
+			UninstallTarget:         m.callbacks.UninstallTarget,
+			ServiceUsesOAuth:        m.callbacks.ServiceUsesOAuth,
+			OAuthManualHint:         m.callbacks.OAuthManualHint,
+			RemoveStoredCredentials: m.callbacks.RemoveStoredCredentials,
 		},
 	)
 	return m, m.screen.Init()

@@ -149,13 +149,14 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 		AllTargets:            allTargets,
 		RegistryEnabled:       registryEnabled,
 
-		ResolveCredential: tuiResolveCredential,
-		StoreCredential:   tuiStoreCredential,
-		InstallTarget:     tuiInstallTarget,
-		UninstallTarget:   tuiUninstallTarget,
-		ServiceUsesOAuth:  serviceUsesOAuth,
-		OAuthManualHint:   oauthManualAuthHint,
-		OpenURL:           openSetupURL,
+		ResolveCredential:       tuiResolveCredential,
+		StoreCredential:         tuiStoreCredential,
+		InstallTarget:           tuiInstallTarget,
+		UninstallTarget:         tuiUninstallTarget,
+		ServiceUsesOAuth:        serviceUsesOAuth,
+		OAuthManualHint:         oauthManualAuthHint,
+		RemoveStoredCredentials: tuiRemoveStoredCredentials,
+		OpenURL:                 openSetupURL,
 	}
 }
 
@@ -164,6 +165,11 @@ func tuiResolveCredential(envName string) (string, string, bool) {
 	fileSource := newCredentialFileSource("")
 	resolver := newCredentialResolver(envSource, fileSource)
 	return resolver.Resolve(envName)
+}
+
+func tuiRemoveStoredCredentials(envNames []string) (int, error) {
+	fileSource := credential.NewFileSource("")
+	return removeStoredCredentials(fileSource, envNames)
 }
 
 func tuiStoreCredential(envName, value string) error {
