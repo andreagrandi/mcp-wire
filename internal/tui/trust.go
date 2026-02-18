@@ -65,8 +65,20 @@ func (t *TrustScreen) View() string {
 	var b strings.Builder
 
 	b.WriteString("\n")
-	b.WriteString(t.theme.Warning.Render("  Registry Service Information:"))
+	b.WriteString(t.theme.Warning.Render("  \u26a0 Registry Service \u2014 not curated by mcp-wire"))
 	b.WriteString("\n\n")
+
+	// Service name and description.
+	displayName := t.entry.DisplayName()
+	if displayName != "" {
+		b.WriteString("  " + t.theme.Active.Render(displayName) + "\n")
+	}
+	if desc := t.entry.Description(); desc != "" {
+		b.WriteString("  " + desc + "\n")
+	}
+	if displayName != "" || t.entry.Description() != "" {
+		b.WriteString("\n")
+	}
 
 	// Metadata lines.
 	b.WriteString(t.metaLine("Source", string(t.entry.Source)+" (community, not vetted by mcp-wire)"))
@@ -93,6 +105,14 @@ func (t *TrustScreen) View() string {
 		b.WriteString(t.metaLine("Transport", transport))
 	}
 
+	// Remote URL.
+	if t.entry.HasRemotes() && t.entry.Registry != nil && len(t.entry.Registry.Server.Remotes) > 0 {
+		url := t.entry.Registry.Server.Remotes[0].URL
+		if url != "" {
+			b.WriteString(t.metaLine("URL", t.theme.Active.Render(url)))
+		}
+	}
+
 	var secretNames []string
 	for _, v := range t.entry.EnvVars() {
 		if v.Required {
@@ -107,8 +127,12 @@ func (t *TrustScreen) View() string {
 		b.WriteString(t.metaLine("Repo", repoURL))
 	}
 
-	// Confirmation prompt.
+	// Caution text.
 	b.WriteString("\n")
+	b.WriteString(t.theme.Warning.Render("  Registry services are community-published. Review before proceeding."))
+	b.WriteString("\n\n")
+
+	// Confirmation prompt.
 	b.WriteString("  Proceed with this registry service?\n\n")
 	b.WriteString(t.renderChoices())
 
@@ -120,7 +144,7 @@ func (t *TrustScreen) metaLine(label, value string) string {
 }
 
 func (t *TrustScreen) renderChoices() string {
-	labels := []string{"No", "Yes"}
+	labels := []string{"No, go back", "Yes, proceed"}
 	var parts []string
 
 	for i, label := range labels {

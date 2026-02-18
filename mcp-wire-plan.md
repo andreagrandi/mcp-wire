@@ -890,6 +890,8 @@ Shown after selecting a non-curated service. Displays service metadata (source, 
 - On "Yes": fetch latest via `refreshRegistryEntry()`, convert via `catalogEntryToService()`, proceed to targets.
 - On "No": back to service list.
 
+Polished view: ⚠ warning header, service name (cyan/bold) + description, remote URL in cyan, caution text, descriptive choice labels ("No, go back" / "Yes, proceed").
+
 Acceptance: Registry service → trust shown. Curated service → skipped.
 
 ### 8.5 — Target Multi-select + Scope (Screens 5, 5b) ✅

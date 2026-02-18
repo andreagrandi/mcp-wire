@@ -178,7 +178,8 @@ func TestTrustScreen_ViewShowsWarningHeader(t *testing.T) {
 	screen := NewTrustScreen(theme, testRegistryEntry())
 
 	view := screen.View()
-	assert.Contains(t, view, "Registry Service Information")
+	assert.Contains(t, view, "Registry Service")
+	assert.Contains(t, view, "not curated by mcp-wire")
 }
 
 func TestTrustScreen_ViewShowsSource(t *testing.T) {
@@ -237,9 +238,42 @@ func TestTrustScreen_ViewShowsChoices(t *testing.T) {
 	screen := NewTrustScreen(theme, testRegistryEntry())
 
 	view := screen.View()
-	assert.Contains(t, view, "No")
-	assert.Contains(t, view, "Yes")
+	assert.Contains(t, view, "No, go back")
+	assert.Contains(t, view, "Yes, proceed")
 	assert.Contains(t, view, "Proceed with this registry service?")
+}
+
+func TestTrustScreen_ViewShowsServiceName(t *testing.T) {
+	theme := NewTheme()
+	screen := NewTrustScreen(theme, testRegistryEntry())
+
+	view := screen.View()
+	assert.Contains(t, view, "community-svc")
+}
+
+func TestTrustScreen_ViewShowsDescription(t *testing.T) {
+	theme := NewTheme()
+	screen := NewTrustScreen(theme, testRegistryEntry())
+
+	view := screen.View()
+	assert.Contains(t, view, "A community service")
+}
+
+func TestTrustScreen_ViewShowsRemoteURL(t *testing.T) {
+	theme := NewTheme()
+	screen := NewTrustScreen(theme, testRegistryEntry())
+
+	view := screen.View()
+	assert.Contains(t, view, "https://example.com/sse")
+}
+
+func TestTrustScreen_ViewShowsCautionText(t *testing.T) {
+	theme := NewTheme()
+	screen := NewTrustScreen(theme, testRegistryEntry())
+
+	view := screen.View()
+	assert.Contains(t, view, "community-published")
+	assert.Contains(t, view, "Review before proceeding")
 }
 
 func TestTrustScreen_StatusHints(t *testing.T) {
