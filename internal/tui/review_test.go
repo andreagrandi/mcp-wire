@@ -275,7 +275,7 @@ func TestReviewScreen_ViewShowsChoices(t *testing.T) {
 	screen := NewReviewScreen(theme, testReviewState(), false)
 
 	view := screen.View()
-	assert.Contains(t, view, "Apply")
+	assert.Contains(t, view, "Install")
 	assert.Contains(t, view, "Cancel")
 }
 

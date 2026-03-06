@@ -13,10 +13,11 @@ import (
 
 // mockTarget implements target.Target for testing.
 type mockTarget struct {
-	name      string
-	slug      string
-	installed bool
-	scopes    []targetpkg.ConfigScope
+	name              string
+	slug              string
+	installed         bool
+	scopes            []targetpkg.ConfigScope
+	installedServices []string
 }
 
 func (m *mockTarget) Name() string      { return m.name }
@@ -26,13 +27,15 @@ func (m *mockTarget) Install(_ service.Service, _ map[string]string) error {
 	return nil
 }
 func (m *mockTarget) Uninstall(_ string) error                 { return nil }
-func (m *mockTarget) List() ([]string, error)                  { return nil, nil }
+func (m *mockTarget) List() ([]string, error)                  { return m.installedServices, nil }
 func (m *mockTarget) SupportedScopes() []targetpkg.ConfigScope { return m.scopes }
 func (m *mockTarget) InstallWithScope(_ service.Service, _ map[string]string, _ targetpkg.ConfigScope) error {
 	return nil
 }
 func (m *mockTarget) UninstallWithScope(_ string, _ targetpkg.ConfigScope) error { return nil }
-func (m *mockTarget) ListWithScope(_ targetpkg.ConfigScope) ([]string, error)    { return nil, nil }
+func (m *mockTarget) ListWithScope(_ targetpkg.ConfigScope) ([]string, error) {
+	return m.installedServices, nil
+}
 
 func testTargets() []targetpkg.Target {
 	return []targetpkg.Target{

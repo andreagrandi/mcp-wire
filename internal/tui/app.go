@@ -34,6 +34,9 @@ type Callbacks struct {
 	// Credential cleanup (post-uninstall).
 	RemoveStoredCredentials func(envNames []string) (int, error)
 
+	// Installed service listing (for uninstall flow).
+	ListInstalledServices func(t targetpkg.Target, scope targetpkg.ConfigScope) ([]string, error)
+
 	// URL opening.
 	OpenURL func(url string) error
 }
@@ -173,7 +176,7 @@ func (m WizardModel) handleMenuSelect(msg menuSelectMsg) (tea.Model, tea.Cmd) {
 		return m.startWizard("install")
 
 	case "Uninstall service":
-		return m.startWizard("uninstall")
+		return m.startUninstallWizard()
 	}
 
 	return m, nil
@@ -193,6 +196,66 @@ func (m WizardModel) startWizard(action string) (tea.Model, tea.Cmd) {
 	// Registry disabled — default to curated, skip source screen.
 	m.state.Source = "curated"
 	return m.showServiceScreen()
+}
+
+func (m WizardModel) startUninstallWizard() (tea.Model, tea.Cmd) {
+	m.state = WizardState{Action: "uninstall"}
+	return m.showUninstallTargetScreen()
+}
+
+func (m WizardModel) showUninstallTargetScreen() (tea.Model, tea.Cmd) {
+	m.steps = []BreadcrumbStep{
+		{Label: "Targets", Active: true, Visible: true},
+	}
+
+	var allTargets []targetpkg.Target
+	if m.callbacks.AllTargets != nil {
+		allTargets = m.callbacks.AllTargets()
+	}
+
+	m.screen = NewTargetScreen(m.theme, allTargets, m.state.Targets)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) showInstalledServiceScreen() (tea.Model, tea.Cmd) {
+	steps := []BreadcrumbStep{
+		{Label: "Targets", Value: targetSummary(m.state.Targets), Completed: true, Visible: true},
+		{Label: "Service", Active: true, Visible: true},
+	}
+	m.steps = steps
+
+	cat := m.buildInstalledCatalog()
+	m.screen = NewServiceScreen(
+		m.theme, "curated", m.contentHeight(),
+		func(_ string) (*catalog.Catalog, error) { return cat, nil },
+		nil,
+	)
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) buildInstalledCatalog() *catalog.Catalog {
+	seen := make(map[string]bool)
+	var entries []catalog.Entry
+
+	for _, t := range m.state.Targets {
+		var names []string
+		if m.callbacks.ListInstalledServices != nil {
+			names, _ = m.callbacks.ListInstalledServices(t, targetpkg.ConfigScopeEffective)
+		}
+		for _, name := range names {
+			key := strings.ToLower(name)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			entries = append(entries, catalog.Entry{
+				Source: catalog.SourceCurated,
+				Name:   name,
+			})
+		}
+	}
+
+	return catalog.Merge(entries, nil)
 }
 
 func (m WizardModel) handleSourceSelect(msg sourceSelectMsg) (tea.Model, tea.Cmd) {
@@ -221,6 +284,15 @@ func (m WizardModel) showServiceScreen() (tea.Model, tea.Cmd) {
 
 func (m WizardModel) handleServiceSelect(msg serviceSelectMsg) (tea.Model, tea.Cmd) {
 	m.state.Entry = msg.entry
+
+	// Uninstall: targets already selected, skip trust, go to scope or review.
+	if m.state.Action == "uninstall" {
+		if anyTargetSupportsProjectScope(m.state.Targets) {
+			return m.showUninstallScopeScreen()
+		}
+		m.state.Scope = targetpkg.ConfigScopeUser
+		return m.showReviewScreen()
+	}
 
 	if registryEntryNeedsConfirmation(msg.entry) {
 		return m.showTrustScreen()
@@ -292,6 +364,11 @@ func (m WizardModel) showTargetScreen() (tea.Model, tea.Cmd) {
 func (m WizardModel) handleTargetSelect(msg targetSelectMsg) (tea.Model, tea.Cmd) {
 	m.state.Targets = msg.targets
 
+	// Uninstall: targets selected first, now show installed services.
+	if m.state.Action == "uninstall" {
+		return m.showInstalledServiceScreen()
+	}
+
 	if anyTargetSupportsProjectScope(msg.targets) {
 		return m.showScopeScreen()
 	}
@@ -320,6 +397,17 @@ func (m WizardModel) showScopeScreen() (tea.Model, tea.Cmd) {
 	steps = append(steps, BreadcrumbStep{
 		Label: "Scope", Active: true, Visible: true,
 	})
+	m.steps = steps
+	m.screen = NewScopeScreen(m.theme, scopedTargetNames(m.state.Targets))
+	return m, m.screen.Init()
+}
+
+func (m WizardModel) showUninstallScopeScreen() (tea.Model, tea.Cmd) {
+	steps := []BreadcrumbStep{
+		{Label: "Targets", Value: targetSummary(m.state.Targets), Completed: true, Visible: true},
+		{Label: "Service", Value: m.state.Entry.Name, Completed: true, Visible: true},
+		{Label: "Scope", Active: true, Visible: true},
+	}
 	m.steps = steps
 	m.screen = NewScopeScreen(m.theme, scopedTargetNames(m.state.Targets))
 	return m, m.screen.Init()
@@ -371,11 +459,18 @@ func (m WizardModel) handleReviewConfirm(msg reviewConfirmMsg) (tea.Model, tea.C
 // convertEntryToService converts the selected catalog entry to a service.Service.
 func (m WizardModel) convertEntryToService() (service.Service, bool) {
 	if m.callbacks.CatalogEntryToService != nil {
-		return m.callbacks.CatalogEntryToService(m.state.Entry)
-	}
-	// Curated entry with direct service reference.
-	if m.state.Entry.Curated != nil {
+		svc, ok := m.callbacks.CatalogEntryToService(m.state.Entry)
+		if ok {
+			return svc, true
+		}
+	} else if m.state.Entry.Curated != nil {
+		// Curated entry with direct service reference.
 		return *m.state.Entry.Curated, true
+	}
+	// Name-only entry (e.g. installed service not in catalog) — for uninstall
+	// we only need the name to remove it.
+	if m.state.Action == "uninstall" && m.state.Entry.Name != "" {
+		return service.Service{Name: m.state.Entry.Name}, true
 	}
 	return service.Service{}, false
 }
@@ -462,6 +557,9 @@ func (m WizardModel) showApplyScreen() (tea.Model, tea.Cmd) {
 func (m WizardModel) handleApplyPostAction(msg applyPostActionMsg) (tea.Model, tea.Cmd) {
 	switch msg.action {
 	case "another":
+		if m.state.Action == "uninstall" {
+			return m.startUninstallWizard()
+		}
 		return m.startWizard(m.state.Action)
 	case "exit":
 		return m, tea.Quit
@@ -478,7 +576,14 @@ func (m WizardModel) handleApplyPostAction(msg applyPostActionMsg) (tea.Model, t
 func (m WizardModel) reviewGoBack() (tea.Model, tea.Cmd) {
 	if anyTargetSupportsProjectScope(m.state.Targets) {
 		m.state.Scope = ""
+		if m.state.Action == "uninstall" {
+			return m.showUninstallScopeScreen()
+		}
 		return m.showScopeScreen()
+	}
+
+	if m.state.Action == "uninstall" {
+		return m.showInstalledServiceScreen()
 	}
 
 	return m.showTargetScreen()
@@ -502,6 +607,27 @@ func applySubstitutions(svc *service.Service, resolvedEnv map[string]string) {
 // reviewBreadcrumbs builds the breadcrumb steps for the review screen.
 func (m WizardModel) reviewBreadcrumbs() []BreadcrumbStep {
 	var steps []BreadcrumbStep
+
+	if m.state.Action == "uninstall" {
+		// Uninstall order: Targets → Service → (Scope).
+		steps = append(steps, BreadcrumbStep{
+			Label: "Targets", Value: targetSummary(m.state.Targets),
+			Completed: true, Visible: true,
+		})
+		steps = append(steps, BreadcrumbStep{
+			Label: "Service", Value: m.state.Entry.Name,
+			Completed: true, Visible: true,
+		})
+		if m.state.Scope == targetpkg.ConfigScopeProject {
+			steps = append(steps, BreadcrumbStep{
+				Label: "Scope", Value: "project",
+				Completed: true, Visible: true,
+			})
+		}
+		return steps
+	}
+
+	// Install order: (Source) → Service → Targets → (Scope).
 	if m.callbacks.RegistryEnabled {
 		steps = append(steps, BreadcrumbStep{
 			Label: "Source", Value: sourceValueLabel(m.state.Source),
@@ -588,10 +714,21 @@ func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 		return m.reviewGoBack()
 
 	case *ScopeScreen:
+		if m.state.Action == "uninstall" {
+			// Uninstall: back from scope goes to service selection.
+			return m.showInstalledServiceScreen()
+		}
 		// Back from scope goes to target selection, preserving selections.
 		return m.showTargetScreen()
 
 	case *TargetScreen:
+		if m.state.Action == "uninstall" {
+			// Uninstall: target is the first screen, back goes to menu.
+			m.screen = NewMenuScreen(m.theme)
+			m.state = WizardState{}
+			m.steps = nil
+			return m, m.screen.Init()
+		}
 		// Back from target goes to service selection.
 		m.state.Targets = nil
 		m.state.Scope = ""
@@ -604,6 +741,11 @@ func (m WizardModel) handleBack() (tea.Model, tea.Cmd) {
 		return m.showServiceScreen()
 
 	case *ServiceScreen:
+		if m.state.Action == "uninstall" {
+			// Uninstall: back from service goes to target selection.
+			m.state.Entry = catalog.Entry{}
+			return m.showUninstallTargetScreen()
+		}
 		if m.callbacks.RegistryEnabled {
 			// Back to source selection.
 			m.screen = NewSourceScreen(m.theme)

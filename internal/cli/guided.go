@@ -169,53 +169,19 @@ func runUninstallWizardPlain(
 	fmt.Fprintln(output, "Uninstall Wizard")
 	fmt.Fprintln(output)
 
-	cfg, err := loadConfig()
-	if err != nil {
-		return fmt.Errorf("load config: %w", err)
-	}
-
-	registryEnabled := cfg.IsFeatureEnabled("registry")
-
-	services, err := loadServices()
-	if err != nil {
-		return fmt.Errorf("load services: %w", err)
-	}
-
-	var svc service.Service
-	for {
-		source := "curated"
-		if registryEnabled {
-			fmt.Fprintln(output, "Source:")
-
-			var sourceErr error
-			source, sourceErr = pickSourceInteractive(output, reader)
-			if sourceErr != nil {
-				return sourceErr
-			}
-
-			fmt.Fprintln(output)
-		}
-
-		fmt.Fprintln(output, "Step 1/4: Service")
-
-		var serviceErr error
-		svc, serviceErr = pickServiceInteractive(output, reader, services, registryEnabled, source)
-		if errors.Is(serviceErr, errRegistryOnly) {
-			fmt.Fprintln(output)
-			continue
-		}
-
-		if serviceErr != nil {
-			return serviceErr
-		}
-
-		break
-	}
-
-	fmt.Fprintln(output)
-	fmt.Fprintln(output, "Step 2/4: Targets")
+	// Step 1: Pick targets first.
+	fmt.Fprintln(output, "Step 1/4: Targets")
 
 	targetDefinitions, err := resolveTargetsForWizard(output, reader, targetSlugs)
+	if err != nil {
+		return err
+	}
+
+	// Step 2: Pick from installed services.
+	fmt.Fprintln(output)
+	fmt.Fprintln(output, "Step 2/4: Service")
+
+	svc, err := pickInstalledServiceInteractive(output, reader, targetDefinitions)
 	if err != nil {
 		return err
 	}
@@ -268,6 +234,65 @@ func runUninstallWizardPlain(
 
 	printEquivalentCommand(output, buildEquivalentUninstallCommand(svc.Name, targetDefinitions, selectedScope))
 	return nil
+}
+
+func pickInstalledServiceInteractive(output ioWriter, reader *bufio.Reader, targets []targetpkg.Target) (service.Service, error) {
+	// Collect installed service names from all selected targets, deduplicating.
+	seen := make(map[string]bool)
+	var names []string
+	for _, t := range targets {
+		var listed []string
+		st, ok := t.(targetpkg.ScopedTarget)
+		if ok {
+			listed, _ = st.ListWithScope(targetpkg.ConfigScopeEffective)
+		} else {
+			listed, _ = t.List()
+		}
+		for _, name := range listed {
+			key := strings.ToLower(name)
+			if !seen[key] {
+				seen[key] = true
+				names = append(names, name)
+			}
+		}
+	}
+
+	if len(names) == 0 {
+		return service.Service{}, errors.New("no services installed in selected targets")
+	}
+
+	sort.Strings(names)
+
+	for {
+		fmt.Fprintln(output, "Installed services:")
+		for i, name := range names {
+			fmt.Fprintf(output, "  %d) %s\n", i+1, name)
+		}
+
+		selection, err := readTrimmedLine(reader, output, "Service number: ")
+		if err != nil {
+			return service.Service{}, fmt.Errorf("read service selection: %w", err)
+		}
+
+		index, err := strconv.Atoi(selection)
+		if err != nil || index < 1 || index > len(names) {
+			fmt.Fprintln(output, "Invalid selection.")
+			continue
+		}
+
+		selectedName := names[index-1]
+
+		// Try to resolve full service definition for credential cleanup.
+		services, loadErr := loadServices()
+		if loadErr == nil {
+			if svc, findErr := findServiceDefinitionByName(services, selectedName); findErr == nil {
+				return svc, nil
+			}
+		}
+
+		// Fall back to name-only service.
+		return service.Service{Name: selectedName}, nil
+	}
 }
 
 func resolveTargetsForWizard(output ioWriter, reader *bufio.Reader, targetSlugs []string) ([]targetpkg.Target, error) {

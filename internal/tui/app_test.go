@@ -98,17 +98,16 @@ func TestWizardModel_InstallNoRegistry_SkipsToService(t *testing.T) {
 	assert.Equal(t, "curated", wm.state.Source)
 }
 
-func TestWizardModel_UninstallNoRegistry_SkipsToService(t *testing.T) {
+func TestWizardModel_UninstallNoRegistry_ShowsTargetFirst(t *testing.T) {
 	model := NewWizardModel(testCallbacks(), "1.0.0")
 	model.height = 20
 
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	_, isService := wm.screen.(*ServiceScreen)
-	assert.True(t, isService)
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 	assert.Equal(t, "uninstall", wm.state.Action)
-	assert.Equal(t, "curated", wm.state.Source)
 }
 
 func testCallbacksWithRegistry() Callbacks {
@@ -130,15 +129,16 @@ func TestWizardModel_InstallWithRegistry_ShowsSource(t *testing.T) {
 	assert.Empty(t, wm.state.Source)
 }
 
-func TestWizardModel_UninstallWithRegistry_ShowsSource(t *testing.T) {
+func TestWizardModel_UninstallWithRegistry_ShowsTargetFirst(t *testing.T) {
 	model := NewWizardModel(testCallbacksWithRegistry(), "1.0.0")
 	model.height = 20
 
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	_, isSource := wm.screen.(*SourceScreen)
-	assert.True(t, isSource)
+	// Even with registry enabled, uninstall goes directly to target screen.
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
 	assert.Equal(t, "uninstall", wm.state.Action)
 }
 
@@ -983,23 +983,33 @@ func TestWizardModel_ReviewViewShowsSummary(t *testing.T) {
 	assert.Contains(t, view, "sentry")
 	assert.Contains(t, view, "Claude Code")
 	assert.Contains(t, view, "mcp-wire install sentry")
-	assert.Contains(t, view, "Apply")
+	assert.Contains(t, view, "Install")
 	assert.Contains(t, view, "Cancel")
 }
 
 func TestWizardModel_ReviewUninstallFlow(t *testing.T) {
-	model := NewWizardModel(testCallbacks(), "1.0.0")
+	cb := testCallbacks()
+	cb.ListInstalledServices = func(_ targetpkg.Target, _ targetpkg.ConfigScope) ([]string, error) {
+		return []string{"sentry", "context7"}, nil
+	}
+	model := NewWizardModel(cb, "1.0.0")
 	model.height = 20
 
+	// Step 1: Menu → Uninstall → target screen.
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	entry := catalog.FromCurated(service.Service{Name: "sentry"})
-	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
-	wm = updated.(WizardModel)
-
+	// Step 2: Select targets → installed service screen.
 	targets := testMockTargets()[:1]
 	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	require.True(t, isService)
+
+	// Step 3: Select a service → review screen.
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "sentry"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
 	_, isReview := wm.screen.(*ReviewScreen)
@@ -1154,22 +1164,22 @@ func TestWizardModel_PreResolvedCredentials_SkipsToApply(t *testing.T) {
 
 func TestWizardModel_UninstallSkipsCredentials(t *testing.T) {
 	cb := testCallbacksWithCredentials()
+	cb.ListInstalledServices = func(_ targetpkg.Target, _ targetpkg.ConfigScope) ([]string, error) {
+		return []string{"sentry"}, nil
+	}
 	model := NewWizardModel(cb, "1.0.0")
 	model.height = 20
 
+	// Uninstall flow: menu → target → service → review → apply.
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	svc := service.Service{
-		Name: "sentry",
-		Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
-	}
-	entry := catalog.FromCurated(svc)
-	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
-	wm = updated.(WizardModel)
-
 	targets := testMockTargets()[:1]
 	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "sentry"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
 	// Apply → uninstall should skip credentials entirely.
@@ -1363,22 +1373,32 @@ func testCallbacksWithCredRemoval() Callbacks {
 
 func TestWizardModel_UninstallWithCredCleanup(t *testing.T) {
 	cb := testCallbacksWithCredRemoval()
+	cb.ListInstalledServices = func(_ targetpkg.Target, _ targetpkg.ConfigScope) ([]string, error) {
+		return []string{"sentry"}, nil
+	}
+	// Override CatalogEntryToService to resolve full service with env vars.
+	cb.CatalogEntryToService = func(e catalog.Entry) (service.Service, bool) {
+		if e.Name == "sentry" {
+			return service.Service{
+				Name: "sentry",
+				Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
+			}, true
+		}
+		return service.Service{}, false
+	}
 	model := NewWizardModel(cb, "1.0.0")
 	model.height = 20
 
+	// Uninstall flow: menu → target → service → review → apply.
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	svc := service.Service{
-		Name: "sentry",
-		Env:  []service.EnvVar{{Name: "SENTRY_TOKEN", Required: true}},
-	}
-	entry := catalog.FromCurated(svc)
-	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
-	wm = updated.(WizardModel)
-
 	targets := testMockTargets()[:1]
 	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "sentry"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
 	// Apply.
@@ -1398,20 +1418,23 @@ func TestWizardModel_UninstallWithCredCleanup(t *testing.T) {
 
 func TestWizardModel_UninstallNoEnvVars_SkipsCredCleanup(t *testing.T) {
 	cb := testCallbacksWithCredRemoval()
+	cb.ListInstalledServices = func(_ targetpkg.Target, _ targetpkg.ConfigScope) ([]string, error) {
+		return []string{"context7"}, nil
+	}
 	model := NewWizardModel(cb, "1.0.0")
 	model.height = 20
 
+	// Uninstall flow: menu → target → service → review → apply.
 	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
 	wm := updated.(WizardModel)
 
-	// Service with no env vars.
-	svc := service.Service{Name: "context7"}
-	entry := catalog.FromCurated(svc)
-	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
-	wm = updated.(WizardModel)
-
 	targets := testMockTargets()[:1]
 	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Service with no env vars (name-only entry).
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "context7"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
 	wm = updated.(WizardModel)
 
 	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
@@ -1423,4 +1446,197 @@ func TestWizardModel_UninstallNoEnvVars_SkipsCredCleanup(t *testing.T) {
 
 	applyScreen := wm.screen.(*ApplyScreen)
 	assert.Equal(t, applySubStateDone, applyScreen.ApplySubState())
+}
+
+// --- Uninstall redesign tests ---
+
+func testCallbacksWithInstalledServices(names []string) Callbacks {
+	cb := testCallbacksWithCredentials()
+	cb.ListInstalledServices = func(_ targetpkg.Target, _ targetpkg.ConfigScope) ([]string, error) {
+		return names, nil
+	}
+	return cb
+}
+
+func TestWizardModel_UninstallTargetToServiceFlow(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry", "context7"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	// Menu → Uninstall → target screen.
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	_, isTarget := wm.screen.(*TargetScreen)
+	require.True(t, isTarget)
+
+	// Select target → installed service screen.
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
+}
+
+func TestWizardModel_UninstallBackFromTargetGoesToMenu(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	// Back from target screen goes to menu.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isMenu := wm.screen.(*MenuScreen)
+	assert.True(t, isMenu)
+}
+
+func TestWizardModel_UninstallBackFromServiceGoesToTarget(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Back from service screen goes to target screen.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
+}
+
+func TestWizardModel_UninstallNameOnlyEntry(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"manually-added"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Name-only entry (not in catalog).
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "manually-added"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Should reach review (not error).
+	_, isReview := wm.screen.(*ReviewScreen)
+	assert.True(t, isReview)
+
+	// Apply should succeed (name-only service).
+	updated, _ = wm.Update(reviewConfirmMsg{confirmed: true})
+	wm = updated.(WizardModel)
+
+	_, isApply := wm.screen.(*ApplyScreen)
+	assert.True(t, isApply)
+}
+
+func TestWizardModel_UninstallBreadcrumbOrder(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "sentry"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	_, isReview := wm.screen.(*ReviewScreen)
+	require.True(t, isReview)
+
+	// Breadcrumbs for uninstall: Targets → Service (no Source).
+	require.Len(t, wm.steps, 2)
+	assert.Equal(t, "Targets", wm.steps[0].Label)
+	assert.Equal(t, "Service", wm.steps[1].Label)
+}
+
+func TestWizardModel_UninstallNoInstalledServices(t *testing.T) {
+	cb := testCallbacksWithInstalledServices(nil) // no installed services
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	targets := testMockTargets()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	// Should show service screen (empty catalog).
+	_, isService := wm.screen.(*ServiceScreen)
+	require.True(t, isService)
+
+	// Simulate catalog loaded (empty).
+	emptyCat := catalog.Merge(nil, nil)
+	updated, _ = wm.Update(catalogLoadedMsg{catalog: emptyCat})
+	wm = updated.(WizardModel)
+
+	// View should indicate no matching services.
+	view := wm.screen.View()
+	assert.Contains(t, view, "No matching services")
+}
+
+func TestWizardModel_UninstallAnotherRestartsCorrectly(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry"})
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	// "Another" from uninstall restarts at target screen.
+	updated, _ = wm.Update(applyPostActionMsg{action: "another"})
+	wm = updated.(WizardModel)
+
+	_, isTarget := wm.screen.(*TargetScreen)
+	assert.True(t, isTarget)
+	assert.Equal(t, "uninstall", wm.state.Action)
+}
+
+func TestWizardModel_UninstallBackFromScopeGoesToService(t *testing.T) {
+	cb := testCallbacksWithInstalledServices([]string{"sentry"})
+	cb.AllTargets = testMockTargetsWithScopes
+	model := NewWizardModel(cb, "1.0.0")
+	model.height = 20
+
+	updated, _ := model.Update(menuSelectMsg{item: "Uninstall service"})
+	wm := updated.(WizardModel)
+
+	targets := testMockTargetsWithScopes()[:1]
+	updated, _ = wm.Update(targetSelectMsg{targets: targets})
+	wm = updated.(WizardModel)
+
+	entry := catalog.Entry{Source: catalog.SourceCurated, Name: "sentry"}
+	updated, _ = wm.Update(serviceSelectMsg{entry: entry})
+	wm = updated.(WizardModel)
+
+	// Should show scope screen.
+	_, isScope := wm.screen.(*ScopeScreen)
+	require.True(t, isScope)
+
+	// Back from scope goes to installed service screen.
+	updated, _ = wm.Update(BackMsg{})
+	wm = updated.(WizardModel)
+
+	_, isService := wm.screen.(*ServiceScreen)
+	assert.True(t, isService)
 }

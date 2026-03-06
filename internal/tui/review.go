@@ -70,7 +70,9 @@ func (r *ReviewScreen) View() string {
 	b.WriteString("\n")
 
 	// Summary lines.
-	if r.registryEnabled {
+	b.WriteString(r.summaryLine("Action", r.actionLabel()))
+
+	if r.registryEnabled && r.state.Action != "uninstall" {
 		b.WriteString(r.summaryLine("Source", sourceValueLabel(r.state.Source)))
 	}
 
@@ -98,6 +100,13 @@ func (r *ReviewScreen) View() string {
 
 func (r *ReviewScreen) summaryLine(label, value string) string {
 	return r.theme.Dim.Render("  "+label+":") + "  " + value + "\n"
+}
+
+func (r *ReviewScreen) actionLabel() string {
+	if r.state.Action == "uninstall" {
+		return "Uninstall service"
+	}
+	return "Install service"
 }
 
 func (r *ReviewScreen) serviceLabel() string {
@@ -128,7 +137,11 @@ func (r *ReviewScreen) equivalentCommand() string {
 }
 
 func (r *ReviewScreen) renderChoices() string {
-	labels := []string{"Apply", "Cancel"}
+	applyLabel := "Install"
+	if r.state.Action == "uninstall" {
+		applyLabel = "Uninstall"
+	}
+	labels := []string{applyLabel, "Cancel"}
 	var parts []string
 
 	for i, label := range labels {

@@ -16,12 +16,13 @@ import (
 )
 
 type fakeUninstallTarget struct {
-	name           string
-	slug           string
-	installed      bool
-	uninstallErr   error
-	uninstallCalls int
-	lastService    string
+	name              string
+	slug              string
+	installed         bool
+	uninstallErr      error
+	uninstallCalls    int
+	lastService       string
+	installedServices []string
 }
 
 type fakeScopedUninstallTarget struct {
@@ -53,7 +54,7 @@ func (t *fakeUninstallTarget) Uninstall(serviceName string) error {
 }
 
 func (t *fakeUninstallTarget) List() ([]string, error) {
-	return nil, nil
+	return t.installedServices, nil
 }
 
 func (t *fakeScopedUninstallTarget) SupportedScopes() []targetpkg.ConfigScope {
@@ -72,7 +73,7 @@ func (t *fakeScopedUninstallTarget) UninstallWithScope(serviceName string, scope
 }
 
 func (t *fakeScopedUninstallTarget) ListWithScope(_ targetpkg.ConfigScope) ([]string, error) {
-	return []string{}, nil
+	return t.installedServices, nil
 }
 
 func TestUninstallCommandUninstallsFromAllInstalledTargetsByDefault(t *testing.T) {
@@ -171,7 +172,10 @@ func TestUninstallWizardPromptsForScopeOnScopedTargets(t *testing.T) {
 	defer restore()
 
 	scoped := &fakeScopedUninstallTarget{
-		fakeUninstallTarget: &fakeUninstallTarget{name: "Claude Code", slug: "claude", installed: true},
+		fakeUninstallTarget: &fakeUninstallTarget{
+			name: "Claude Code", slug: "claude", installed: true,
+			installedServices: []string{"demo-service"},
+		},
 	}
 
 	loadServices = func(_ ...string) (map[string]service.Service, error) {
@@ -188,7 +192,8 @@ func TestUninstallWizardPromptsForScopeOnScopedTargets(t *testing.T) {
 		return []targetpkg.Target{scoped}
 	}
 
-	output, err := executeUninstallCommandWithInput(t, "\n1\n1\n2\n\n")
+	// New flow: target(1) → service(1) → scope(2=project) → confirm(enter=Y)
+	output, err := executeUninstallCommandWithInput(t, "1\n1\n2\n\n")
 	if err != nil {
 		t.Fatalf("expected interactive uninstall to succeed: %v", err)
 	}
@@ -275,7 +280,10 @@ func TestUninstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 	restore := overrideUninstallCommandDependencies(t)
 	defer restore()
 
-	alpha := &fakeUninstallTarget{name: "Alpha CLI", slug: "alpha", installed: true}
+	alpha := &fakeUninstallTarget{
+		name: "Alpha CLI", slug: "alpha", installed: true,
+		installedServices: []string{"demo-service"},
+	}
 
 	loadServices = func(_ ...string) (map[string]service.Service, error) {
 		return map[string]service.Service{
@@ -291,7 +299,8 @@ func TestUninstallCommandPromptsForServiceWhenArgMissing(t *testing.T) {
 		return []targetpkg.Target{alpha}
 	}
 
-	output, err := executeUninstallCommandWithInput(t, "\n1\n1\n\n")
+	// New flow: target(1) → service from installed(1) → confirm(enter=Y)
+	output, err := executeUninstallCommandWithInput(t, "1\n1\n\n")
 	if err != nil {
 		t.Fatalf("expected interactive uninstall command to succeed: %v", err)
 	}

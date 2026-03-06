@@ -129,8 +129,17 @@ func tuiCallbacks(cfg *config.Config) tui.Callbacks {
 		ServiceUsesOAuth:        serviceUsesOAuth,
 		OAuthManualHint:         oauthManualAuthHint,
 		RemoveStoredCredentials: tuiRemoveStoredCredentials,
+		ListInstalledServices:   tuiListInstalledServices,
 		OpenURL:                 openSetupURL,
 	}
+}
+
+func tuiListInstalledServices(t targetpkg.Target, scope targetpkg.ConfigScope) ([]string, error) {
+	st, ok := t.(targetpkg.ScopedTarget)
+	if ok {
+		return st.ListWithScope(scope)
+	}
+	return t.List()
 }
 
 func tuiResolveCredential(envName string) (string, string, bool) {
