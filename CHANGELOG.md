@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## v0.2.2 - 2026-03-06
+
+### Changed
+- Redesigned uninstall flow: users now pick the target first, then choose from only the services installed there, instead of browsing the full catalog.
+- Review screen now shows an explicit "Action" line and uses "Install"/"Uninstall" button labels instead of the generic "Apply".
+- Plain-text (non-TUI) uninstall wizard also follows the new target-first flow.
+
 ## v0.2.1 - 2026-02-18
 
 ### Added
