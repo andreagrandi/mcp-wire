@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        go-version: ['1.26']
+        go-version: ['1.24', '1.25', '1.26.1']
 
     steps:
     - name: Checkout code
@@ -61,7 +61,7 @@ jobs:
 
     strategy:
       matrix:
-        go-version: ['1.26']
+        go-version: ['1.24', '1.25', '1.26.1']
 
     steps:
     - name: Checkout code
@@ -107,7 +107,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v6
       with:
-        go-version: '1.26'
+        go-version: '1.26.1'
         cache: false
 
     - name: Cache Go modules
@@ -116,9 +116,9 @@ jobs:
         path: |
           ~/.cache/go-build
           ~/go/pkg/mod
-        key: ${{ runner.os }}-go-1.26-${{ hashFiles('**/go.sum') }}
+        key: ${{ runner.os }}-go-1.26.1-${{ hashFiles('**/go.sum') }}
         restore-keys: |
-          ${{ runner.os }}-go-1.26-
+          ${{ runner.os }}-go-1.26.1-
 
     - name: Download dependencies
       run: go mod download

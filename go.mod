@@ -1,6 +1,8 @@
 module github.com/andreagrandi/mcp-wire
 
-go 1.26.1
+go 1.24.2
+
+toolchain go1.26.1
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0
