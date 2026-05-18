@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Contributor workflow: PRs that change user-visible code (`internal/`, `cmd/`, `services/`, or `README.md`) must add an entry under `## [Unreleased]` in `CHANGELOG.md`. A new CI check enforces this; opt out with the `skip-changelog` label or `[no-changelog]` in the PR title for genuinely non-user-visible changes.
+
 ## v0.2.2 - 2026-03-06
 
 ### Changed
