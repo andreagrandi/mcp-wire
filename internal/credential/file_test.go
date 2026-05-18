@@ -129,6 +129,49 @@ func TestFileSourceStoreCreatesFileWithStrictPermissions(t *testing.T) {
 	}
 }
 
+func TestFileSourceStoreCreatesDirectoryWithStrictPermissions(t *testing.T) {
+	credentialsDir := filepath.Join(t.TempDir(), "mcp-wire")
+	source := NewFileSource(filepath.Join(credentialsDir, "credentials"))
+
+	if err := source.Store("DEMO_TOKEN", "token-value"); err != nil {
+		t.Fatalf("expected store to succeed: %v", err)
+	}
+
+	info, err := os.Stat(credentialsDir)
+	if err != nil {
+		t.Fatalf("expected credentials directory to exist: %v", err)
+	}
+
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("expected credentials directory mode 0700, got %#o", info.Mode().Perm())
+	}
+}
+
+func TestFileSourceStoreTightensExistingDirectoryPermissions(t *testing.T) {
+	credentialsDir := filepath.Join(t.TempDir(), "mcp-wire")
+	if err := os.MkdirAll(credentialsDir, 0o755); err != nil {
+		t.Fatalf("failed to seed credentials directory: %v", err)
+	}
+
+	if err := os.Chmod(credentialsDir, 0o755); err != nil {
+		t.Fatalf("failed to set seed directory permissions: %v", err)
+	}
+
+	source := NewFileSource(filepath.Join(credentialsDir, "credentials"))
+	if err := source.Store("DEMO_TOKEN", "token-value"); err != nil {
+		t.Fatalf("expected store to succeed: %v", err)
+	}
+
+	info, err := os.Stat(credentialsDir)
+	if err != nil {
+		t.Fatalf("expected credentials directory to exist: %v", err)
+	}
+
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("expected credentials directory mode 0700 after store, got %#o", info.Mode().Perm())
+	}
+}
+
 func TestFileSourceGetParsesAndIgnoresInvalidLines(t *testing.T) {
 	credentialsPath := filepath.Join(t.TempDir(), "credentials")
 	content := "invalid-line\n# comment\nTOKEN_A=value-a\nTOKEN_B=value=b\n=broken\n"

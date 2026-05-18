@@ -174,6 +174,10 @@ func (s *FileSource) writeAll(entries map[string]string) error {
 		return fmt.Errorf("create credentials directory %q: %w", credentialsDir, err)
 	}
 
+	if err := os.Chmod(credentialsDir, 0o700); err != nil {
+		return fmt.Errorf("set credentials directory permissions on %q: %w", credentialsDir, err)
+	}
+
 	keys := make([]string, 0, len(entries))
 	for name := range entries {
 		keys = append(keys, name)
