@@ -150,6 +150,7 @@ Contributions are welcome, especially new service definitions.
 - **Transport values**: `http` (streamable HTTP endpoint), `sse` (Server-Sent Events endpoint), `stdio` (local command-based MCP server).
 - **OAuth services**: add `auth: oauth` when applicable so install flows can drive authentication hints/automation.
 - **Run checks before PRs**: `make test`, `make test-integration`, `make build`.
+- **Update `CHANGELOG.md`**: every PR with a user-visible change (commands, flags, services, targets, install flows, packaging) adds a bullet under `## [Unreleased]`. See the "Changelog updates" section in `AGENTS.md` for what counts and how to format entries. CI enforces this.
 
 Example service file:
 

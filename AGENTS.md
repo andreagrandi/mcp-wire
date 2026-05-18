@@ -72,6 +72,50 @@ Create a new file in `internal/target/` implementing the `Target` interface (Nam
 
 See `mcp-wire-plan.md` for the full phased roadmap and design decisions.
 
+## Changelog updates
+
+`CHANGELOG.md` follows the Keep a Changelog format with an `[Unreleased]` section on top. Every PR that introduces a user-visible change must add an entry under `[Unreleased]` in the same commit/PR — do not wait for release time.
+
+A change is user-visible if it affects any of:
+
+- CLI commands, flags, prompts, or output (TUI or plain-text)
+- Bundled service definitions (added/removed/renamed services, transport or env changes)
+- Target support (new targets, scope behavior, config file layout)
+- Install/uninstall/credential/OAuth flows
+- Packaging, distribution, install paths, release artifacts
+- Public Go types or interfaces that other targets/services rely on
+- Documented behavior in `README.md` or the service/target schema
+
+A change is NOT user-visible (and does not require an entry) when it only touches:
+
+- Tests, fixtures, or test helpers
+- Internal refactors with no behavior change
+- CI/workflow files, lint config, or developer tooling
+- Comments, formatting, or non-user-facing docs (`CLAUDE.md`, `AGENTS.md`, internal plans)
+
+### How to write the entry
+
+- Add a bullet under `## [Unreleased]`, grouped by `### Added`, `### Changed`, `### Removed`, `### Fixed`, or `### Security` (create the subsection if it does not exist yet).
+- Be concise: one sentence per bullet, describing the user-visible effect — not the implementation.
+- Lead with the verb (`Added`, `Removed`, `Renamed`, `Fixed`) and name the thing as users see it (command, flag, service name, target slug, screen).
+- Do not invent a new version header; only the release process promotes `[Unreleased]` to a versioned section.
+
+Example:
+
+```markdown
+## [Unreleased]
+
+### Added
+- New `mcp-wire doctor` command that prints detected target config paths and their write status.
+
+### Changed
+- `install` now prints the resolved config path for each target after a successful write.
+```
+
+### Enforcement
+
+CI runs a `changelog` check on every PR (`.github/workflows/changelog.yml`) that fails when source code under `internal/`, `cmd/`, `services/`, or `README.md` changes without a matching update to `CHANGELOG.md`. The check is skipped automatically for PRs labeled `skip-changelog` or whose title contains `[no-changelog]` — use these only for changes that are genuinely not user-visible (test-only, refactor-only, CI-only).
+
 ## Release process
 
 When asked to create a new release, follow this exact sequence:
@@ -91,8 +135,9 @@ make test-integration
 
 3. Update `CHANGELOG.md`:
 
-- Add a short bullet-point summary of changes since the last release.
-- Follow the existing changelog format.
+- Rename the `## [Unreleased]` header to `## v<version> - <YYYY-MM-DD>`, keeping all bullets in place.
+- Add a fresh empty `## [Unreleased]` header above it for the next cycle.
+- If `[Unreleased]` is empty at release time, that means changelog discipline slipped during the cycle — review the commits since the last tag and backfill bullets before tagging.
 
 4. Commit the release-prep changes.
 5. Push the release-prep commit.
