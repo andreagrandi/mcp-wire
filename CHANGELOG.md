@@ -5,6 +5,10 @@
 ### Changed
 - Contributor workflow: PRs that change user-visible code (`internal/`, `cmd/`, `services/`, or `README.md`) must add an entry under `## [Unreleased]` in `CHANGELOG.md`. A new CI check enforces this; opt out with the `skip-changelog` label or `[no-changelog]` in the PR title for genuinely non-user-visible changes.
 
+### Security
+- Credentials directory (`~/.config/mcp-wire/`) is now re-tightened to mode `0700` on every credential store, not only when it is first created, so pre-existing directories with broader permissions are corrected automatically.
+- Documented credential storage expectations in `README.md`: where credentials live, the file/directory permissions used, the resolution order, and that values are stored in plaintext.
+
 ## v0.2.2 - 2026-03-06
 
 ### Changed

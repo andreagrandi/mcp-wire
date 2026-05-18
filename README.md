@@ -123,6 +123,29 @@ mcp-wire feature enable registry
 
 Once enabled, the install wizard offers a source selection step (Curated / Registry / Both) with live search across all registry entries.
 
+## Credential storage
+
+When you accept the "Save to credential store?" prompt during install, mcp-wire writes the credential to:
+
+```
+~/.config/mcp-wire/credentials
+```
+
+The file is a plain `KEY=value` list, one credential per line. It is created with mode `0600` (owner read/write only) inside a directory created with mode `0700`. mcp-wire re-applies these permissions on every write, including when an existing directory was previously created with broader permissions.
+
+At install time credentials are resolved in this order, and the first match wins:
+
+1. Process environment variables.
+2. The local credentials file above.
+3. An interactive prompt (skipped when `--no-prompt` is set).
+
+A few things worth knowing:
+
+- Values are stored in plaintext. mcp-wire does not encrypt them or integrate with the system keychain.
+- The same values are written into each target tool's MCP config (e.g. `~/.claude.json`, `~/.codex/config.toml`), so target config files are also created with mode `0600`.
+- Interactive prompts mask typed input in both the TUI (password-style echo) and the plain CLI (`term.ReadPassword`). mcp-wire never echoes stored credential values back to the screen, into logs, or into error messages.
+- To remove stored credentials for a service, use the uninstall flow and answer "Yes" at the "Remove stored credentials?" prompt, or edit the credentials file directly.
+
 ## Installation
 
 ### Homebrew (macOS/Linux)
