@@ -11,6 +11,70 @@ Before making code or documentation changes in this repo:
 
 Do not start work from an old feature branch unless the user explicitly asks to continue that branch.
 
+## Adding a Ticket, Issue, or Bug
+
+When the user asks to add a "ticket", "issue", or "bug" to this repo, all of the
+steps below are required — creating the GitHub issue alone is not enough.
+
+**1. Create the issue** with the repo label and an area label:
+
+```bash
+gh issue create --repo andreagrandi/mcp-wire \
+  --title "<concise title>" \
+  --body "<description>" \
+  --label "mcp-wire" \
+  --label "<area>"
+```
+
+- Always apply the `mcp-wire` label — every work item in this repo carries it.
+- Add the matching area label when one exists: `feature`, `ux`, `agent`,
+  `docs`, `security`, `testing`, `release`. The `Reliability` and `Packaging`
+  areas have no label; for those, set only the project Area field (step 3).
+- Add a type label when it fits: `bug` (bug report), `enhancement` (feature
+  request), or `documentation` (docs-only work).
+
+**2. Add the issue to the "CLI Tools" project** and capture the item ID
+(https://github.com/users/andreagrandi/projects/1):
+
+```bash
+ITEM_ID=$(gh project item-add 1 --owner andreagrandi \
+  --url <issue-url> --format json --jq .id)
+```
+
+**3. Set Priority, Area, and Status** on the project item. The project and
+field IDs are identical for every repo on this board:
+
+- Project ID: `PVT_kwHOAAm1584BYDlZ`
+- Priority — field `PVTSSF_lAHOAAm1584BYDlZzhTMDck`:
+  High `ed3787e3`, Medium `3e3ea407`, Low `994234f4`
+- Area — field `PVTSSF_lAHOAAm1584BYDlZzhTMDco`:
+  Reliability `6595432d`, Packaging `6895c50a`, UX `2bc024bb`,
+  Testing `0d5bc016`, Feature `6390f97d`, Agent `3a2d6f7e`,
+  Docs `f5c50514`, Security `062d12a3`, Release `b344aeab`
+- Status — field `PVTSSF_lAHOAAm1584BYDlZzhTMDNQ`:
+  Todo `f75ad846`, In Progress `47fc9ee4`, Done `98236657`
+
+```bash
+# Priority — always set it
+gh project item-edit --id "$ITEM_ID" --project-id PVT_kwHOAAm1584BYDlZ \
+  --field-id PVTSSF_lAHOAAm1584BYDlZzhTMDck \
+  --single-select-option-id <priority-option-id>
+
+# Area — match the area label from step 1
+gh project item-edit --id "$ITEM_ID" --project-id PVT_kwHOAAm1584BYDlZ \
+  --field-id PVTSSF_lAHOAAm1584BYDlZzhTMDco \
+  --single-select-option-id <area-option-id>
+
+# Status — new tickets start as Todo
+gh project item-edit --id "$ITEM_ID" --project-id PVT_kwHOAAm1584BYDlZ \
+  --field-id PVTSSF_lAHOAAm1584BYDlZzhTMDNQ \
+  --single-select-option-id f75ad846
+```
+
+If the user does not state a priority or area, ask before creating the issue.
+Follow the conventions of existing project issues — do not invent new labels or
+fields.
+
 ## Build & Test Commands
 
 ```bash
