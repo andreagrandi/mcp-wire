@@ -23,14 +23,13 @@ gh issue create --repo andreagrandi/mcp-wire \
   --title "<concise title>" \
   --body "<description>" \
   --label "mcp-wire" \
-  --label "area:<area>"
+  --label "<area>"
 ```
 
 - Always apply the `mcp-wire` label — every work item in this repo carries it.
-- Add the matching `area:<area>` label when one exists: `area:feature`,
-  `area:ux`, `area:agent`, `area:docs`, `area:security`, `area:testing`,
-  `area:release`. The `Reliability` and `Packaging` areas have no label; for
-  those, set only the project Area field (step 3).
+- Add the matching area label when one exists: `feature`, `ux`, `agent`,
+  `docs`, `security`, `testing`, `release`. The `Reliability` and `Packaging`
+  areas have no label; for those, set only the project Area field (step 3).
 - Add a type label when it fits: `bug` (bug report), `enhancement` (feature
   request), or `documentation` (docs-only work).
 
@@ -61,7 +60,7 @@ gh project item-edit --id "$ITEM_ID" --project-id PVT_kwHOAAm1584BYDlZ \
   --field-id PVTSSF_lAHOAAm1584BYDlZzhTMDck \
   --single-select-option-id <priority-option-id>
 
-# Area — match the area:<area> label from step 1
+# Area — match the area label from step 1
 gh project item-edit --id "$ITEM_ID" --project-id PVT_kwHOAAm1584BYDlZ \
   --field-id PVTSSF_lAHOAAm1584BYDlZzhTMDco \
   --single-select-option-id <area-option-id>
