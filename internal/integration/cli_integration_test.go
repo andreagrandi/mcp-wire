@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	toml "github.com/pelletier/go-toml/v2"
 )
 
 func TestOpenCodeLifecycleInstallUninstall(t *testing.T) {
@@ -131,6 +133,139 @@ env:
 	}
 }
 
+func TestClaudeCodeLifecycleInstallUninstall(t *testing.T) {
+	sandbox := newCLISandbox(t)
+
+	writeServiceDefinition(t, filepath.Join(sandbox.servicesDir, "remote-docs.yaml"), `name: remote-docs
+description: "Remote docs service"
+transport: sse
+url: "https://docs.example.com/mcp"
+env: []
+`)
+
+	installOutput, err := sandbox.runCLI("install", "remote-docs", "--target", "claude", "--no-prompt")
+	if err != nil {
+		t.Fatalf("install failed: %v\n%s", err, installOutput)
+	}
+
+	if !strings.Contains(installOutput, "Claude Code: configured") {
+		t.Fatalf("expected successful Claude install output, got:\n%s", installOutput)
+	}
+
+	config := sandbox.readClaudeConfig()
+	mcpServers := mustObject(t, config["mcpServers"], "mcpServers")
+	remoteDocs := mustObject(t, mcpServers["remote-docs"], "mcpServers.remote-docs")
+
+	if remoteDocs["type"] != "sse" {
+		t.Fatalf("expected sse type, got %#v", remoteDocs["type"])
+	}
+
+	if remoteDocs["url"] != "https://docs.example.com/mcp" {
+		t.Fatalf("expected URL to match, got %#v", remoteDocs["url"])
+	}
+
+	uninstallOutput, err := sandbox.runCLI("uninstall", "remote-docs", "--target", "claude")
+	if err != nil {
+		t.Fatalf("uninstall failed: %v\n%s", err, uninstallOutput)
+	}
+
+	if !strings.Contains(uninstallOutput, "Claude Code: removed") {
+		t.Fatalf("expected successful Claude uninstall output, got:\n%s", uninstallOutput)
+	}
+
+	configAfterUninstall := sandbox.readClaudeConfig()
+	mcpAfterUninstall := mustObject(t, configAfterUninstall["mcpServers"], "mcpServers")
+	if _, exists := mcpAfterUninstall["remote-docs"]; exists {
+		t.Fatalf("expected remote-docs to be removed from Claude config, got %#v", mcpAfterUninstall)
+	}
+}
+
+func TestCodexCLILifecycleInstallUninstall(t *testing.T) {
+	sandbox := newCLISandbox(t)
+
+	writeServiceDefinition(t, filepath.Join(sandbox.servicesDir, "remote-docs.yaml"), `name: remote-docs
+description: "Remote docs service"
+transport: sse
+url: "https://docs.example.com/mcp"
+env: []
+`)
+
+	installOutput, err := sandbox.runCLI("install", "remote-docs", "--target", "codex", "--no-prompt")
+	if err != nil {
+		t.Fatalf("install failed: %v\n%s", err, installOutput)
+	}
+
+	if !strings.Contains(installOutput, "Codex CLI: configured") {
+		t.Fatalf("expected successful Codex install output, got:\n%s", installOutput)
+	}
+
+	config := sandbox.readCodexConfig(t)
+	mcpServers := mustObject(t, config["mcp_servers"], "mcp_servers")
+	remoteDocs := mustObject(t, mcpServers["remote-docs"], "mcp_servers.remote-docs")
+
+	if remoteDocs["url"] != "https://docs.example.com/mcp" {
+		t.Fatalf("expected URL to match, got %#v", remoteDocs["url"])
+	}
+
+	uninstallOutput, err := sandbox.runCLI("uninstall", "remote-docs", "--target", "codex")
+	if err != nil {
+		t.Fatalf("uninstall failed: %v\n%s", err, uninstallOutput)
+	}
+
+	if !strings.Contains(uninstallOutput, "Codex CLI: removed") {
+		t.Fatalf("expected successful Codex uninstall output, got:\n%s", uninstallOutput)
+	}
+
+	configAfterUninstall := sandbox.readCodexConfig(t)
+	mcpAfterUninstall := mustObject(t, configAfterUninstall["mcp_servers"], "mcp_servers")
+	if _, exists := mcpAfterUninstall["remote-docs"]; exists {
+		t.Fatalf("expected remote-docs to be removed from Codex config, got %#v", mcpAfterUninstall)
+	}
+}
+
+func TestGeminiCLILifecycleInstallUninstall(t *testing.T) {
+	sandbox := newCLISandbox(t)
+
+	writeServiceDefinition(t, filepath.Join(sandbox.servicesDir, "remote-docs.yaml"), `name: remote-docs
+description: "Remote docs service"
+transport: sse
+url: "https://docs.example.com/mcp"
+env: []
+`)
+
+	installOutput, err := sandbox.runCLI("install", "remote-docs", "--target", "gemini", "--no-prompt")
+	if err != nil {
+		t.Fatalf("install failed: %v\n%s", err, installOutput)
+	}
+
+	if !strings.Contains(installOutput, "Gemini CLI: configured") {
+		t.Fatalf("expected successful Gemini install output, got:\n%s", installOutput)
+	}
+
+	config := sandbox.readGeminiConfig()
+	mcpServers := mustObject(t, config["mcpServers"], "mcpServers")
+	remoteDocs := mustObject(t, mcpServers["remote-docs"], "mcpServers.remote-docs")
+
+	if remoteDocs["url"] != "https://docs.example.com/mcp" {
+		t.Fatalf("expected URL to match, got %#v", remoteDocs["url"])
+	}
+
+	uninstallOutput, err := sandbox.runCLI("uninstall", "remote-docs", "--target", "gemini")
+	if err != nil {
+		t.Fatalf("uninstall failed: %v\n%s", err, uninstallOutput)
+	}
+
+	if !strings.Contains(uninstallOutput, "Gemini CLI: removed") {
+		t.Fatalf("expected successful Gemini uninstall output, got:\n%s", uninstallOutput)
+	}
+
+	configAfterUninstall := sandbox.readGeminiConfig()
+	mcpAfterUninstall := mustObject(t, configAfterUninstall["mcpServers"], "mcpServers")
+	if _, exists := mcpAfterUninstall["remote-docs"]; exists {
+		t.Fatalf("expected remote-docs to be removed from Gemini config, got %#v", mcpAfterUninstall)
+	}
+}
+
 type cliSandbox struct {
 	binaryPath  string
 	homeDir     string
@@ -157,7 +292,9 @@ func newCLISandbox(t *testing.T) cliSandbox {
 		t.Fatalf("failed to create fake bin directory: %v", err)
 	}
 
-	createExecutable(t, filepath.Join(binDir, "opencode"), "#!/bin/sh\nexit 0\n")
+	for _, binaryName := range []string{"claude", "codex", "gemini", "opencode"} {
+		createExecutable(t, filepath.Join(binDir, binaryName), "#!/bin/sh\nexit 0\n")
+	}
 
 	binaryPath := filepath.Join(t.TempDir(), "mcp-wire")
 	buildCmd := exec.Command("go", "build", "-o", binaryPath, "./cmd/mcp-wire")
@@ -197,8 +334,39 @@ func (s cliSandbox) runCLIWithEnv(extraEnv map[string]string, args ...string) (s
 }
 
 func (s cliSandbox) readOpenCodeConfig() map[string]any {
-	configPath := filepath.Join(s.homeDir, ".config", "opencode", "opencode.json")
+	return readJSONConfig(filepath.Join(s.homeDir, ".config", "opencode", "opencode.json"))
+}
 
+func (s cliSandbox) readClaudeConfig() map[string]any {
+	return readJSONConfig(filepath.Join(s.homeDir, ".claude.json"))
+}
+
+func (s cliSandbox) readGeminiConfig() map[string]any {
+	return readJSONConfig(filepath.Join(s.homeDir, ".gemini", "settings.json"))
+}
+
+func (s cliSandbox) readCodexConfig(t *testing.T) map[string]any {
+	t.Helper()
+
+	configPath := filepath.Join(s.homeDir, ".codex", "config.toml")
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]any{}
+		}
+
+		t.Fatalf("failed to read codex config %q: %v", configPath, err)
+	}
+
+	config := map[string]any{}
+	if err := toml.Unmarshal(data, &config); err != nil {
+		t.Fatalf("failed to parse codex config %q: %v", configPath, err)
+	}
+
+	return config
+}
+
+func readJSONConfig(configPath string) map[string]any {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		return map[string]any{}
