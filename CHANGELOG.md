@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- New `mcp-wire doctor` command that prints read-only diagnostics: detected targets and their config paths, feature flag state, mcp-wire config/credentials/services/registry-cache paths, and hints for missing targets or disabled features.
+
 ### Changed
 - Contributor workflow: PRs that change user-visible code (`internal/`, `cmd/`, `services/`, or `README.md`) must add an entry under `## [Unreleased]` in `CHANGELOG.md`. A new CI check enforces this; opt out with the `skip-changelog` label or `[no-changelog]` in the PR title for genuinely non-user-visible changes.
 

@@ -50,6 +50,11 @@ func (t *ClaudeCodeTarget) Slug() string {
 	return claudeCodeSlug
 }
 
+// ConfigPath returns the on-disk path of the Claude Code config file.
+func (t *ClaudeCodeTarget) ConfigPath() string {
+	return t.configPath
+}
+
 // IsInstalled reports whether Claude Code is available via supported install methods.
 func (t *ClaudeCodeTarget) IsInstalled() bool {
 	binaryNames := t.binaryNames

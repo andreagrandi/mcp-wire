@@ -49,6 +49,11 @@ func (t *GeminiCLITarget) Slug() string {
 	return geminiSlug
 }
 
+// ConfigPath returns the on-disk path of the Gemini CLI config file.
+func (t *GeminiCLITarget) ConfigPath() string {
+	return t.configPath
+}
+
 // IsInstalled reports whether Gemini CLI is available via supported install methods.
 func (t *GeminiCLITarget) IsInstalled() bool {
 	binaryNames := t.binaryNames

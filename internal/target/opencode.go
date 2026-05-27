@@ -53,6 +53,11 @@ func (t *OpenCodeTarget) Slug() string {
 	return openCodeSlug
 }
 
+// ConfigPath returns the on-disk path of the OpenCode config file.
+func (t *OpenCodeTarget) ConfigPath() string {
+	return t.configPath
+}
+
 // IsInstalled reports whether OpenCode is available via supported install methods.
 func (t *OpenCodeTarget) IsInstalled() bool {
 	binaryNames := t.binaryNames

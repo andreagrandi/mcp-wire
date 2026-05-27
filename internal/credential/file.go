@@ -37,6 +37,15 @@ func (s *FileSource) Name() string {
 	return fileSourceName
 }
 
+// Path returns the on-disk path of the credentials file.
+func (s *FileSource) Path() string {
+	if s == nil {
+		return ""
+	}
+
+	return s.path
+}
+
 // Get returns the credential value when present in the file.
 func (s *FileSource) Get(envName string) (string, bool) {
 	if s == nil {
