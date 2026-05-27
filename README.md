@@ -82,6 +82,14 @@ mcp-wire install jira --target claude --no-prompt
 mcp-wire uninstall sentry --target opencode
 ```
 
+### Diagnostics
+
+Run `mcp-wire doctor` for a read-only diagnostic report. It lists each supported target, whether it is detected on this system, the config path it would write to and whether that file exists, current feature flag state, and the paths mcp-wire uses for its own config, credentials, user-local services, and registry cache. It also prints hints for missing targets and disabled features. The command never writes to any config or credential file.
+
+```bash
+mcp-wire doctor
+```
+
 ### Scope-aware installs (Claude Code)
 
 For targets that support scopes (currently Claude Code), you can choose where MCP config is written:

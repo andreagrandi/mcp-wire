@@ -46,6 +46,11 @@ func (t *CodexTarget) Slug() string {
 	return codexSlug
 }
 
+// ConfigPath returns the on-disk path of the Codex CLI config file.
+func (t *CodexTarget) ConfigPath() string {
+	return t.configPath
+}
+
 // IsInstalled reports whether Codex CLI is available in PATH.
 func (t *CodexTarget) IsInstalled() bool {
 	_, err := t.lookPath(codexBinaryName)

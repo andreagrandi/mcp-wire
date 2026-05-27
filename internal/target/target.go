@@ -50,3 +50,9 @@ type ScopedTarget interface {
 type AuthTarget interface {
 	Authenticate(serviceName string, stdin io.Reader, stdout io.Writer, stderr io.Writer) error
 }
+
+// ConfigPathProvider is an optional interface for targets that can report
+// the on-disk path of the configuration file they read and write.
+type ConfigPathProvider interface {
+	ConfigPath() string
+}
