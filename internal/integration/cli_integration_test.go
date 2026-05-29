@@ -223,49 +223,6 @@ env: []
 	}
 }
 
-func TestGeminiCLILifecycleInstallUninstall(t *testing.T) {
-	sandbox := newCLISandbox(t)
-
-	writeServiceDefinition(t, filepath.Join(sandbox.servicesDir, "remote-docs.yaml"), `name: remote-docs
-description: "Remote docs service"
-transport: sse
-url: "https://docs.example.com/mcp"
-env: []
-`)
-
-	installOutput, err := sandbox.runCLI("install", "remote-docs", "--target", "gemini", "--no-prompt")
-	if err != nil {
-		t.Fatalf("install failed: %v\n%s", err, installOutput)
-	}
-
-	if !strings.Contains(installOutput, "Gemini CLI: configured") {
-		t.Fatalf("expected successful Gemini install output, got:\n%s", installOutput)
-	}
-
-	config := sandbox.readGeminiConfig()
-	mcpServers := mustObject(t, config["mcpServers"], "mcpServers")
-	remoteDocs := mustObject(t, mcpServers["remote-docs"], "mcpServers.remote-docs")
-
-	if remoteDocs["url"] != "https://docs.example.com/mcp" {
-		t.Fatalf("expected URL to match, got %#v", remoteDocs["url"])
-	}
-
-	uninstallOutput, err := sandbox.runCLI("uninstall", "remote-docs", "--target", "gemini")
-	if err != nil {
-		t.Fatalf("uninstall failed: %v\n%s", err, uninstallOutput)
-	}
-
-	if !strings.Contains(uninstallOutput, "Gemini CLI: removed") {
-		t.Fatalf("expected successful Gemini uninstall output, got:\n%s", uninstallOutput)
-	}
-
-	configAfterUninstall := sandbox.readGeminiConfig()
-	mcpAfterUninstall := mustObject(t, configAfterUninstall["mcpServers"], "mcpServers")
-	if _, exists := mcpAfterUninstall["remote-docs"]; exists {
-		t.Fatalf("expected remote-docs to be removed from Gemini config, got %#v", mcpAfterUninstall)
-	}
-}
-
 type cliSandbox struct {
 	binaryPath  string
 	homeDir     string
@@ -292,7 +249,7 @@ func newCLISandbox(t *testing.T) cliSandbox {
 		t.Fatalf("failed to create fake bin directory: %v", err)
 	}
 
-	for _, binaryName := range []string{"claude", "codex", "gemini", "opencode"} {
+	for _, binaryName := range []string{"claude", "codex", "opencode"} {
 		createExecutable(t, filepath.Join(binDir, binaryName), "#!/bin/sh\nexit 0\n")
 	}
 
@@ -339,10 +296,6 @@ func (s cliSandbox) readOpenCodeConfig() map[string]any {
 
 func (s cliSandbox) readClaudeConfig() map[string]any {
 	return readJSONConfig(filepath.Join(s.homeDir, ".claude.json"))
-}
-
-func (s cliSandbox) readGeminiConfig() map[string]any {
-	return readJSONConfig(filepath.Join(s.homeDir, ".gemini", "settings.json"))
 }
 
 func (s cliSandbox) readCodexConfig(t *testing.T) map[string]any {

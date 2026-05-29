@@ -5,7 +5,6 @@ import "strings"
 var knownTargets = []Target{
 	NewClaudeCodeTarget(),
 	NewCodexTarget(),
-	NewGeminiCLITarget(),
 	NewOpenCodeTarget(),
 }
 

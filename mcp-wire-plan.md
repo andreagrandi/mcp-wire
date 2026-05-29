@@ -2,7 +2,7 @@
 
 ## Overview
 
-**mcp-wire** is a CLI tool written in Go that lets users install and configure MCP (Model Context Protocol) servers across multiple AI coding CLI tools (Claude Code, Codex, Gemini CLI, OpenCode, etc.) from a single interface.
+**mcp-wire** is a CLI tool written in Go that lets users install and configure MCP (Model Context Protocol) servers across multiple AI coding CLI tools (Claude Code, Codex, OpenCode, etc.) from a single interface.
 
 The architecture has two dimensions:
 
@@ -239,7 +239,6 @@ Implementation follows the same pattern as Claude Code.
 
 Each of these would be a new file in `internal/target/`:
 
-- `geminicli.go` — Gemini CLI
 - `opencode.go` — OpenCode
 
 Research their config formats when adding support. Each should take roughly 50-100 lines of Go following the established pattern.
@@ -948,9 +947,8 @@ These are features to consider after the core works. Not to be implemented now.
 4. **`mcp-wire credentials list`** — show stored credentials (masked).
 5. **`mcp-wire credentials rotate <service>`** — re-open setup URL, re-prompt, update all targets.
 6. **Additional registry providers** — support third-party/private registries that implement the MCP Registry API, with per-registry trust controls.
-7. **Gemini CLI target** — add when config format is stable and documented.
-8. **Target capability parity** — expand and test Claude/Codex/OpenCode parity for advanced MCP config shapes (for example richer header mapping, variable substitution, and transport-specific options).
-9. **`mcp-wire diff`** — show what's configured in targets vs what a manifest says, dry-run mode.
-10. **Profiles** — "work" vs "personal" service sets, each with their own credentials and target selection.
-11. **Service health check** — `mcp-wire check <service>` verifies the MCP endpoint responds.
-12. **Shell completions** — Cobra has built-in support for bash/zsh/fish completions.
+7. **Target capability parity** — expand and test Claude/Codex/OpenCode parity for advanced MCP config shapes (for example richer header mapping, variable substitution, and transport-specific options).
+8. **`mcp-wire diff`** — show what's configured in targets vs what a manifest says, dry-run mode.
+9. **Profiles** — "work" vs "personal" service sets, each with their own credentials and target selection.
+10. **Service health check** — `mcp-wire check <service>` verifies the MCP endpoint responds.
+11. **Shell completions** — Cobra has built-in support for bash/zsh/fish completions.
