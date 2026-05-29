@@ -41,7 +41,7 @@ func testTargets() []targetpkg.Target {
 	return []targetpkg.Target{
 		&mockTarget{name: "Claude Code", slug: "claude", installed: true},
 		&mockTarget{name: "Codex", slug: "codex", installed: true},
-		&mockTarget{name: "Gemini CLI", slug: "geminicli", installed: false},
+		&mockTarget{name: "OpenCode", slug: "opencode", installed: false},
 	}
 }
 
@@ -277,7 +277,7 @@ func TestTargetScreen_ViewContainsTargetNames(t *testing.T) {
 	view := screen.View()
 	assert.Contains(t, view, "Claude Code")
 	assert.Contains(t, view, "Codex")
-	assert.Contains(t, view, "Gemini CLI")
+	assert.Contains(t, view, "OpenCode")
 }
 
 func TestTargetScreen_ViewShowsCheckboxes(t *testing.T) {
@@ -365,5 +365,5 @@ func TestTargetScreen_SlugsInView(t *testing.T) {
 	view := screen.View()
 	assert.Contains(t, view, "(claude)")
 	assert.Contains(t, view, "(codex)")
-	assert.Contains(t, view, "(geminicli)")
+	assert.Contains(t, view, "(opencode)")
 }

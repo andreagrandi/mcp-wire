@@ -95,7 +95,7 @@ Always format the code with gofmt before commit and push
 mcp-wire is a CLI tool that installs MCP (Model Context Protocol) servers across multiple AI coding tools from a single interface. Two independent dimensions:
 
 - **Services** (`internal/service/`): *what* to install. Defined as YAML files in `services/` or `~/.config/mcp-wire/services/`. No Go code needed to add a service. User-local definitions override bundled ones by name.
-- **Targets** (`internal/target/`): *where* to install. Each target implements the `Target` interface and knows how to read/write a specific tool's config file. Currently: Claude Code. Planned: Codex, Gemini CLI, OpenCode.
+- **Targets** (`internal/target/`): *where* to install. Each target implements the `Target` interface and knows how to read/write a specific tool's config file. Currently: Claude Code, Codex, OpenCode.
 
 The CLI (`internal/cli/`) combines the two: user picks a service, tool resolves credentials, writes config into target(s).
 

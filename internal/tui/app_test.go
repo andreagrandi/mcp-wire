@@ -17,7 +17,7 @@ func testMockTargets() []targetpkg.Target {
 	return []targetpkg.Target{
 		&mockTarget{name: "Claude Code", slug: "claude", installed: true},
 		&mockTarget{name: "Codex", slug: "codex", installed: true},
-		&mockTarget{name: "Gemini CLI", slug: "geminicli", installed: false},
+		&mockTarget{name: "OpenCode", slug: "opencode", installed: false},
 	}
 }
 

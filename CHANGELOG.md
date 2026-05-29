@@ -8,6 +8,9 @@
 ### Changed
 - Contributor workflow: PRs that change user-visible code (`internal/`, `cmd/`, `services/`, or `README.md`) must add an entry under `## [Unreleased]` in `CHANGELOG.md`. A new CI check enforces this; opt out with the `skip-changelog` label or `[no-changelog]` in the PR title for genuinely non-user-visible changes.
 
+### Removed
+- Gemini CLI is no longer a supported target. The `gemini` target slug, its config writer for `~/.gemini/settings.json`, and all related CLI/TUI references have been removed. Existing Gemini configs on disk are left untouched; uninstall or remove entries manually if needed.
+
 ### Security
 - Credentials directory (`~/.config/mcp-wire/`) is now re-tightened to mode `0700` on every credential store, not only when it is first created, so pre-existing directories with broader permissions are corrected automatically.
 - Documented credential storage expectations in `README.md`: where credentials live, the file/directory permissions used, the resolution order, and that values are stored in plaintext.

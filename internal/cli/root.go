@@ -22,7 +22,7 @@ var rootCmd = &cobra.Command{
 	Use:   "mcp-wire",
 	Short: "Install and configure MCP servers across AI coding tools",
 	Long: `mcp-wire is a CLI tool that lets you install and configure MCP (Model Context Protocol)
-servers across multiple AI coding CLI tools (Claude Code, Codex, Gemini CLI, etc.)
+servers across multiple AI coding CLI tools (Claude Code, Codex, OpenCode, etc.)
 from a single interface.
 
 Services are defined as YAML files -- no code needed to add one.
