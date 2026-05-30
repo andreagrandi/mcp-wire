@@ -1,0 +1,16 @@
+
+  ⚠ Registry Service — not curated by mcp-wire
+
+  pkg-svc
+  A package service
+
+  Source:  registry (community, not vetted by mcp-wire)
+  Install:  package
+  Package:  npm (@example/mcp-server@1.2.3)
+  Runtime:  requires Node.js 18+
+
+  Registry services are community-published. Review before proceeding.
+
+  Proceed with this registry service?
+
+  [No, go back]   Yes, proceed 

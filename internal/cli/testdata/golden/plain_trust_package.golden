@@ -1,0 +1,7 @@
+
+Registry Service Information:
+  Source:    registry (community, not vetted by mcp-wire)
+  Install:   package
+  Package:   npm (@example/mcp-server@1.2.3)
+  Runtime:   requires Node.js 18+
+

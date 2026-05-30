@@ -1,0 +1,10 @@
+
+  △ sentry partially installed
+
+  ✓ Claude Code      configured
+  ✗ Codex            failed — permission denied
+
+  Equivalent command:
+    mcp-wire install sentry --target claude --target codex
+
+  [Retry failed]   Back to menu    Exit 

@@ -1,0 +1,10 @@
+
+  ✓ sentry installed successfully
+
+  ✓ Claude Code      configured
+  ✓ Codex            configured
+
+  Equivalent command:
+    mcp-wire install sentry --target claude --target codex
+
+  [Install another]   Back to menu    Exit 
