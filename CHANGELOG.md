@@ -7,6 +7,7 @@
 - New `mcp-wire doctor` command that prints read-only diagnostics: detected targets and their config paths, feature flag state, mcp-wire config/credentials/services/registry-cache paths, and hints for missing targets or disabled features.
 
 ### Changed
+- TUI service list now shows a metadata line under each service — source, transport, install method, and auth requirement (e.g. `curated · http · remote · OAuth`) — so curated and registry services are easier to compare while browsing.
 - Contributor workflow: PRs that change user-visible code (`internal/`, `cmd/`, `services/`, or `README.md`) must add an entry under `## [Unreleased]` in `CHANGELOG.md`. A new CI check enforces this; opt out with the `skip-changelog` label or `[no-changelog]` in the PR title for genuinely non-user-visible changes.
 
 ### Removed

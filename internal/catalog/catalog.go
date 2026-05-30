@@ -171,6 +171,35 @@ func (e Entry) InstallType() string {
 	return ""
 }
 
+// InstallMethodLabel returns a user-facing description of how the entry is
+// installed: "remote", "package", "remote/package", "local", or "".
+func (e Entry) InstallMethodLabel() string {
+	if t := e.InstallType(); t != "" {
+		return t
+	}
+	// Curated stdio service installed by running a local command (e.g. npx).
+	if e.Source == SourceCurated && e.Curated != nil && strings.TrimSpace(e.Curated.Command) != "" {
+		return "local"
+	}
+	return ""
+}
+
+// AuthLabel returns a short description of the credentials the entry needs:
+// "OAuth", "API key", or "none".
+func (e Entry) AuthLabel() string {
+	if e.Source == SourceCurated && e.Curated != nil {
+		if strings.EqualFold(strings.TrimSpace(e.Curated.Auth), "oauth") {
+			return "OAuth"
+		}
+	}
+	for _, v := range e.EnvVars() {
+		if v.Required {
+			return "API key"
+		}
+	}
+	return "none"
+}
+
 // PackageTypes returns the package registry types (e.g., "npm", "pypi")
 // for registry entries. Returns nil for curated entries.
 func (e Entry) PackageTypes() []string {
