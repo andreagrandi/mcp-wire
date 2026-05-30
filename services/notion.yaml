@@ -1,0 +1,6 @@
+name: notion
+description: "Notion MCP server (OAuth)"
+transport: http
+auth: oauth
+url: "https://mcp.notion.com/mcp"
+env: []

@@ -217,7 +217,7 @@ func TestLoadServicesLoadsEmbeddedDefaultsWhenPathsAreMissing(t *testing.T) {
 		t.Fatalf("expected embedded services to load: %v", err)
 	}
 
-	for _, name := range []string{"jira", "sentry", "context7", "playwright"} {
+	for _, name := range []string{"jira", "sentry", "context7", "playwright", "github", "notion", "linear"} {
 		if _, ok := services[name]; !ok {
 			t.Fatalf("expected service %q to be available from embedded defaults", name)
 		}

@@ -116,7 +116,10 @@ mcp-wire uninstall jira --target claude --scope project
 These ship with the binary and work out of the box:
 
 - `context7` - Context7 documentation lookup MCP (OAuth)
+- `github` - GitHub MCP server (OAuth)
 - `jira` - Atlassian Rovo MCP server (OAuth)
+- `linear` - Linear MCP server (OAuth)
+- `notion` - Notion MCP server (OAuth)
 - `sentry` - Sentry MCP server (OAuth)
 - `playwright` - Playwright browser automation MCP (`npx @playwright/mcp@latest`)
 

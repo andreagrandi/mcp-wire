@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- Curated `github`, `notion`, and `linear` services — official OAuth-remote (streamable HTTP) MCP servers that install out of the box.
 - New `mcp-wire doctor` command that prints read-only diagnostics: detected targets and their config paths, feature flag state, mcp-wire config/credentials/services/registry-cache paths, and hints for missing targets or disabled features.
 
 ### Changed
