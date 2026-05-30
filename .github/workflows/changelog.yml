@@ -30,7 +30,7 @@ jobs:
 
       - name: Checkout PR
         if: steps.optout.outputs.skip == 'false'
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.sha }}
