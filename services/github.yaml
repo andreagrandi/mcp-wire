@@ -1,0 +1,6 @@
+name: github
+description: "GitHub MCP server (OAuth)"
+transport: http
+auth: oauth
+url: "https://api.githubcopilot.com/mcp/"
+env: []

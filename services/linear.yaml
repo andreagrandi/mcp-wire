@@ -1,0 +1,6 @@
+name: linear
+description: "Linear MCP server (OAuth)"
+transport: http
+auth: oauth
+url: "https://mcp.linear.app/mcp"
+env: []
