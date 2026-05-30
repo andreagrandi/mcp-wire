@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 	targetpkg "github.com/andreagrandi/mcp-wire/internal/target"
 )
@@ -96,6 +98,86 @@ func TestTrustScreenGolden(t *testing.T) {
 	t.Run("secrets", func(t *testing.T) {
 		screen := NewTrustScreen(theme, testRegistryEntryWithSecrets())
 		assertGolden(t, "trust_secrets", screen.View())
+	})
+}
+
+// testGoldenCuratedEntries returns curated entries exercising the OAuth-remote
+// and local-stdio metadata shapes.
+func testGoldenCuratedEntries() []catalog.Entry {
+	return []catalog.Entry{
+		catalog.FromCurated(service.Service{
+			Name:        "github",
+			Description: "GitHub MCP server (OAuth)",
+			Transport:   "http",
+			Auth:        "oauth",
+			URL:         "https://api.githubcopilot.com/mcp/",
+		}),
+		catalog.FromCurated(service.Service{
+			Name:        "playwright",
+			Description: "Playwright browser automation MCP server",
+			Transport:   "stdio",
+			Command:     "npx",
+			Args:        []string{"@playwright/mcp@latest"},
+		}),
+	}
+}
+
+// testGoldenRegistryEntries returns registry entries exercising the remote
+// (with secret) and package metadata shapes.
+func testGoldenRegistryEntries() []catalog.Entry {
+	return []catalog.Entry{
+		{
+			Source: catalog.SourceRegistry,
+			Name:   "io.example/search",
+			Registry: &registry.ServerResponse{
+				Server: registry.ServerJSON{
+					Name:        "io.example/search",
+					Title:       "Example Search",
+					Description: "Community search server",
+					Remotes: []registry.Transport{
+						{
+							Type: "sse",
+							URL:  "https://mcp.example.com/sse",
+							Headers: []registry.KeyValueInput{
+								{Name: "API_KEY", Description: "API key", IsRequired: true, IsSecret: true},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			Source: catalog.SourceRegistry,
+			Name:   "io.example/tools",
+			Registry: &registry.ServerResponse{
+				Server: registry.ServerJSON{
+					Name:        "io.example/tools",
+					Title:       "Example Tools",
+					Description: "Community tools package",
+					Packages: []registry.Package{
+						{RegistryType: "npm", Identifier: "@example/tools", Transport: registry.Transport{Type: "stdio"}},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestServiceScreenGolden(t *testing.T) {
+	theme := NewTheme()
+
+	t.Run("curated", func(t *testing.T) {
+		cat := catalog.Merge(testGoldenCuratedEntries(), nil)
+		screen := NewServiceScreen(theme, "curated", 30, nil, nil)
+		s, _ := screen.Update(catalogLoadedMsg{catalog: cat})
+		assertGolden(t, "service_curated", s.View())
+	})
+
+	t.Run("all_sources", func(t *testing.T) {
+		cat := catalog.Merge(testGoldenCuratedEntries(), testGoldenRegistryEntries())
+		screen := NewServiceScreen(theme, "all", 30, nil, nil)
+		s, _ := screen.Update(catalogLoadedMsg{catalog: cat})
+		assertGolden(t, "service_all_sources", s.View())
 	})
 }
 

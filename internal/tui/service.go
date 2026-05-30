@@ -25,21 +25,22 @@ type syncStatusMsg struct {
 
 // ServiceScreen provides live-filtered search over a catalog of services.
 type ServiceScreen struct {
-	theme       Theme
-	search      textinput.Model
-	cat         *catalog.Catalog
-	filtered    []catalog.Entry
-	cursor      int
-	offset      int
-	viewHeight  int
-	width       int
-	source      string
-	showMarkers bool
-	syncStatus  string
-	loading     bool
-	loadErr     error
-	loadFn      func(string) (*catalog.Catalog, error)
-	syncFn      func() string
+	theme        Theme
+	search       textinput.Model
+	cat          *catalog.Catalog
+	filtered     []catalog.Entry
+	cursor       int
+	offset       int
+	viewHeight   int
+	width        int
+	source       string
+	showMarkers  bool
+	showMetadata bool
+	syncStatus   string
+	loading      bool
+	loadErr      error
+	loadFn       func(string) (*catalog.Catalog, error)
+	syncFn       func() string
 }
 
 // NewServiceScreen creates a new service selection screen.
@@ -104,6 +105,7 @@ func (s *ServiceScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return s, nil
 		}
 		s.cat = msg.catalog
+		s.showMetadata = catalogHasMetadata(msg.catalog)
 		s.applyFilter()
 		return s, nil
 
@@ -178,12 +180,22 @@ func (s *ServiceScreen) applyFilter() {
 	s.offset = 0
 }
 
+// entryLines is the number of rendered lines each service occupies: name and
+// description, plus a metadata line when metadata is available.
+func (s *ServiceScreen) entryLines() int {
+	if s.showMetadata {
+		return 3
+	}
+	return 2
+}
+
 func (s *ServiceScreen) maxVisibleEntries() int {
 	lines := s.viewHeight - serviceHeaderLines
-	if lines < 2 {
+	per := s.entryLines()
+	if lines < per {
 		return 1
 	}
-	return lines / 2
+	return lines / per
 }
 
 func (s *ServiceScreen) ensureVisible() {
@@ -270,6 +282,12 @@ func (s *ServiceScreen) View() string {
 			b.WriteString(s.theme.Dim.Render("      " + desc))
 		}
 		b.WriteString("\n")
+
+		// Metadata line: source, transport, install method, and auth.
+		if s.showMetadata {
+			b.WriteString(s.theme.Dim.Render("      " + serviceMetaLine(entry)))
+			b.WriteString("\n")
+		}
 	}
 
 	if hasMore {
@@ -335,6 +353,38 @@ func (s *ServiceScreen) StatusHints() []KeyHint {
 		{Key: "type", Desc: "to filter"},
 		{Key: "Esc", Desc: "back"},
 	}
+}
+
+// serviceMetaLine builds a compact, dot-separated metadata summary for an
+// entry: source, transport, install method, and auth requirement.
+func serviceMetaLine(entry catalog.Entry) string {
+	parts := make([]string, 0, 4)
+	if entry.Source != "" {
+		parts = append(parts, string(entry.Source))
+	}
+	if transport := entry.Transport(); transport != "" {
+		parts = append(parts, transport)
+	}
+	if method := entry.InstallMethodLabel(); method != "" {
+		parts = append(parts, method)
+	}
+	parts = append(parts, entry.AuthLabel())
+	return strings.Join(parts, " · ")
+}
+
+// catalogHasMetadata reports whether any entry carries curated or registry
+// detail. Name-only entries (e.g. the uninstall picker) carry none, so the
+// metadata line is suppressed for them.
+func catalogHasMetadata(cat *catalog.Catalog) bool {
+	if cat == nil {
+		return false
+	}
+	for _, e := range cat.All() {
+		if e.Curated != nil || e.Registry != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // Testing accessors.

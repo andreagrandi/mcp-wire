@@ -39,9 +39,11 @@ Install › community ✓ › Service › Targets › Review › Apply
 
   › ai.sentry/sentry-mcp
     Sentry error tracking and performance monitoring MCP server
+    registry · http · remote · API key
 
     ai.example/sentry-alerts
     Forward Sentry alerts to your AI coding assistant
+    registry · sse · remote · none
 
                           — end of results —
 

@@ -1,0 +1,17 @@
+  Search: type to filter...
+  4 services
+
+  ❯ * github
+      GitHub MCP server (OAuth)
+      curated · http · remote · OAuth
+      io.example/search
+      Community search server
+      registry · sse · remote · API key
+      io.example/tools
+      Community tools package
+      registry · stdio · package · none
+    * playwright
+      Playwright browser automation MCP server
+      curated · stdio · local · none
+
+          — end of results —

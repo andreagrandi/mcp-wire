@@ -797,6 +797,87 @@ func TestPackageTypesDeduplication(t *testing.T) {
 	}
 }
 
+func TestInstallMethodLabelRemote(t *testing.T) {
+	entry := FromRegistry(sampleRegistryServer("ns/a", "A", "Server A"))
+	if entry.InstallMethodLabel() != "remote" {
+		t.Fatalf("expected install method=%q, got %q", "remote", entry.InstallMethodLabel())
+	}
+}
+
+func TestInstallMethodLabelCuratedLocal(t *testing.T) {
+	svc := service.Service{Name: "playwright", Transport: "stdio", Command: "npx"}
+	entry := FromCurated(svc)
+	if entry.InstallMethodLabel() != "local" {
+		t.Fatalf("expected install method=%q for curated stdio command, got %q", "local", entry.InstallMethodLabel())
+	}
+}
+
+func TestInstallMethodLabelEmpty(t *testing.T) {
+	svc := service.Service{Name: "bare", Transport: "stdio"}
+	entry := FromCurated(svc)
+	if entry.InstallMethodLabel() != "" {
+		t.Fatalf("expected empty install method for stdio without command, got %q", entry.InstallMethodLabel())
+	}
+}
+
+func TestAuthLabelOAuth(t *testing.T) {
+	svc := service.Service{Name: "github", Transport: "http", Auth: "oauth"}
+	entry := FromCurated(svc)
+	if entry.AuthLabel() != "OAuth" {
+		t.Fatalf("expected auth=%q, got %q", "OAuth", entry.AuthLabel())
+	}
+}
+
+func TestAuthLabelOAuthCaseInsensitive(t *testing.T) {
+	svc := service.Service{Name: "github", Transport: "http", Auth: "OAuth"}
+	entry := FromCurated(svc)
+	if entry.AuthLabel() != "OAuth" {
+		t.Fatalf("expected auth=%q, got %q", "OAuth", entry.AuthLabel())
+	}
+}
+
+func TestAuthLabelCuratedNone(t *testing.T) {
+	svc := service.Service{Name: "playwright", Transport: "stdio", Command: "npx"}
+	entry := FromCurated(svc)
+	if entry.AuthLabel() != "none" {
+		t.Fatalf("expected auth=%q, got %q", "none", entry.AuthLabel())
+	}
+}
+
+func TestAuthLabelCuratedAPIKey(t *testing.T) {
+	entry := FromCurated(sampleService("sentry", "Error tracking"))
+	if entry.AuthLabel() != "API key" {
+		t.Fatalf("expected auth=%q for curated entry with required env, got %q", "API key", entry.AuthLabel())
+	}
+}
+
+func TestAuthLabelRegistryAPIKey(t *testing.T) {
+	resp := registry.ServerResponse{
+		Server: registry.ServerJSON{
+			Name:    "ns/a",
+			Version: "1.0.0",
+			Packages: []registry.Package{
+				{
+					EnvironmentVariables: []registry.KeyValueInput{
+						{Name: "API_KEY", Description: "API key", IsRequired: true},
+					},
+				},
+			},
+		},
+	}
+	entry := FromRegistry(resp)
+	if entry.AuthLabel() != "API key" {
+		t.Fatalf("expected auth=%q, got %q", "API key", entry.AuthLabel())
+	}
+}
+
+func TestAuthLabelRegistryNone(t *testing.T) {
+	entry := FromRegistry(sampleRegistryServer("ns/a", "A", "Server A"))
+	if entry.AuthLabel() != "none" {
+		t.Fatalf("expected auth=%q for registry remote without secrets, got %q", "none", entry.AuthLabel())
+	}
+}
+
 func TestPackageTypesCurated(t *testing.T) {
 	entry := FromCurated(sampleService("test", "test"))
 	types := entry.PackageTypes()

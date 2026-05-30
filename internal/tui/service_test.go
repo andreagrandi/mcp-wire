@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/andreagrandi/mcp-wire/internal/catalog"
+	"github.com/andreagrandi/mcp-wire/internal/registry"
 	"github.com/andreagrandi/mcp-wire/internal/service"
 )
 
@@ -416,4 +417,97 @@ func TestServiceScreen_WindowResize(t *testing.T) {
 
 	assert.Equal(t, 100, updated.width)
 	assert.Equal(t, 30-ChromeLines, updated.viewHeight)
+}
+
+func TestServiceScreen_ViewShowsCuratedMetadata(t *testing.T) {
+	theme := NewTheme()
+	screen := NewServiceScreen(theme, "curated", 30, nil, nil)
+
+	curated := []catalog.Entry{
+		catalog.FromCurated(service.Service{
+			Name:        "github",
+			Description: "GitHub MCP server",
+			Transport:   "http",
+			Auth:        "oauth",
+			URL:         "https://example.com/mcp",
+		}),
+	}
+	s, _ := screen.Update(catalogLoadedMsg{catalog: catalog.Merge(curated, nil)})
+	updated := s.(*ServiceScreen)
+
+	view := updated.View()
+	assert.Contains(t, view, "curated")
+	assert.Contains(t, view, "http")
+	assert.Contains(t, view, "remote")
+	assert.Contains(t, view, "OAuth")
+}
+
+func TestServiceScreen_ViewShowsRegistryMetadata(t *testing.T) {
+	theme := NewTheme()
+	screen := NewServiceScreen(theme, "registry", 30, nil, nil)
+
+	cat := catalog.Merge(nil, []catalog.Entry{testRegistryEntryWithSecrets()})
+	s, _ := screen.Update(catalogLoadedMsg{catalog: cat})
+	updated := s.(*ServiceScreen)
+
+	view := updated.View()
+	assert.Contains(t, view, "registry")
+	assert.Contains(t, view, "sse")
+	assert.Contains(t, view, "remote")
+	assert.Contains(t, view, "API key")
+}
+
+func TestServiceScreen_MetadataEntryHeight(t *testing.T) {
+	// Backed entries (curated/registry) reserve a third line for metadata.
+	screen := loadedServiceScreen(t, 20)
+	assert.True(t, screen.showMetadata)
+	assert.Equal(t, 3, screen.entryLines())
+}
+
+func TestServiceScreen_NoMetadataForNameOnlyEntries(t *testing.T) {
+	theme := NewTheme()
+	screen := NewServiceScreen(theme, "curated", 30, nil, nil)
+
+	// Name-only entries, as built by the uninstall picker, carry no metadata.
+	entries := []catalog.Entry{
+		{Source: catalog.SourceCurated, Name: "installed-svc"},
+	}
+	s, _ := screen.Update(catalogLoadedMsg{catalog: catalog.Merge(entries, nil)})
+	updated := s.(*ServiceScreen)
+
+	assert.False(t, updated.showMetadata)
+	assert.Equal(t, 2, updated.entryLines())
+
+	view := updated.View()
+	assert.Contains(t, view, "installed-svc")
+	// No auth facet is rendered when there is no metadata to show.
+	assert.NotContains(t, view, "none")
+}
+
+func TestServiceMetaLine(t *testing.T) {
+	t.Run("curated_oauth_remote", func(t *testing.T) {
+		entry := catalog.FromCurated(service.Service{
+			Name: "github", Transport: "http", Auth: "oauth", URL: "https://example.com/mcp",
+		})
+		assert.Equal(t, "curated · http · remote · OAuth", serviceMetaLine(entry))
+	})
+
+	t.Run("curated_stdio_local", func(t *testing.T) {
+		entry := catalog.FromCurated(service.Service{
+			Name: "playwright", Transport: "stdio", Command: "npx",
+		})
+		assert.Equal(t, "curated · stdio · local · none", serviceMetaLine(entry))
+	})
+
+	t.Run("registry_package", func(t *testing.T) {
+		entry := catalog.FromRegistry(registry.ServerResponse{
+			Server: registry.ServerJSON{
+				Name: "ns/tools",
+				Packages: []registry.Package{
+					{RegistryType: "npm", Identifier: "@ns/tools", Transport: registry.Transport{Type: "stdio"}},
+				},
+			},
+		})
+		assert.Equal(t, "registry · stdio · package · none", serviceMetaLine(entry))
+	})
 }
