@@ -5,6 +5,7 @@
 ### Added
 - Curated `github`, `notion`, and `linear` services — official OAuth-remote (streamable HTTP) MCP servers that install out of the box.
 - New `mcp-wire doctor` command that prints read-only diagnostics: detected targets and their config paths, feature flag state, mcp-wire config/credentials/services/registry-cache paths, and hints for missing targets or disabled features.
+- New `mcp-wire metadata` command that prints a stable, machine-readable JSON document for automation and AI agents: supported transports and scopes, every target (install status, config path, supported scopes, OAuth support), every service (transport, auth requirement, environment variables), and feature-flag state. Defaults to curated services; use `--source registry` or `--source all` to include registry services.
 
 ### Changed
 - TUI service list now shows a metadata line under each service — source, transport, install method, and auth requirement (e.g. `curated · http · remote · OAuth`) — so curated and registry services are easier to compare while browsing.
