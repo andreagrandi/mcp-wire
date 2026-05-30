@@ -1,0 +1,11 @@
+
+  Action:  Install service
+  Source:  Curated services
+  Service:  sentry — Error tracking
+  Targets:  Claude Code
+  Scope:  Project (current directory only)
+  Credentials:  prompt as needed
+
+  Command:  mcp-wire install sentry --target claude --scope project
+
+  [Install]   Cancel 

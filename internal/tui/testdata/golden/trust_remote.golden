@@ -1,0 +1,17 @@
+
+  ⚠ Registry Service — not curated by mcp-wire
+
+  community-svc
+  A community service
+
+  Source:  registry (community, not vetted by mcp-wire)
+  Install:  remote
+  Transport:  sse
+  URL:  https://example.com/sse
+  Repo:  https://github.com/example/svc
+
+  Registry services are community-published. Review before proceeding.
+
+  Proceed with this registry service?
+
+  [No, go back]   Yes, proceed 

@@ -187,10 +187,6 @@ Example:
 - `install` now prints the resolved config path for each target after a successful write.
 ```
 
-### Enforcement
-
-CI runs a `changelog` check on every PR (`.github/workflows/changelog.yml`) that fails when source code under `internal/`, `cmd/`, `services/`, or `README.md` changes without a matching update to `CHANGELOG.md`. The check is skipped automatically for PRs labeled `skip-changelog` or whose title contains `[no-changelog]` — use these only for changes that are genuinely not user-visible (test-only, refactor-only, CI-only).
-
 ## Release process
 
 When asked to create a new release, follow this exact sequence:

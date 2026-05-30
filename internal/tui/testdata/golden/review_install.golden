@@ -1,0 +1,9 @@
+
+  Action:  Install service
+  Service:  sentry — Error tracking
+  Targets:  Claude Code, Codex
+  Credentials:  prompt as needed
+
+  Command:  mcp-wire install sentry --target claude --target codex
+
+  [Install]   Cancel 

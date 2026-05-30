@@ -1,0 +1,8 @@
+
+  Action:  Uninstall service
+  Service:  sentry — Error tracking
+  Targets:  Claude Code, Codex
+
+  Command:  mcp-wire uninstall sentry --target claude --target codex
+
+  [Uninstall]   Cancel 

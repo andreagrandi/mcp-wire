@@ -1,0 +1,8 @@
+
+Registry Service Information:
+  Source:    registry (community, not vetted by mcp-wire)
+  Install:   remote
+  Transport: sse
+  Secrets:   API_KEY
+  Repo:      https://github.com/example/svc
+
