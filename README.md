@@ -92,6 +92,66 @@ Run `mcp-wire doctor` for a read-only diagnostic report. It lists each supported
 mcp-wire doctor
 ```
 
+### Machine-readable metadata (for agents and automation)
+
+Run `mcp-wire metadata` to print a stable JSON document describing what mcp-wire can do. It is intended for AI agents and scripts that need to inspect capabilities without driving the interactive TUI:
+
+```bash
+mcp-wire metadata
+```
+
+The document includes the supported transports and install scopes, every target (with install status, config path, supported scopes, and whether it can complete OAuth automatically), every service in the selected source (with transport, auth requirement, and the environment variables it needs), and current feature-flag state. By default only curated services are listed; pass `--source registry` or `--source all` to include community registry services (this requires the registry feature to be enabled).
+
+The top-level `schema_version` field identifies the document structure and is only incremented on breaking changes, so automation can pin to a known shape. The `auth` field on each service is one of `oauth`, `api_key`, or `none`.
+
+```jsonc
+{
+  "schema_version": 1,
+  "mcp_wire_version": "0.2.2",
+  "transports": ["http", "sse", "stdio"],
+  "scopes": ["user", "project"],
+  "targets": [
+    {
+      "name": "Claude Code",
+      "slug": "claude",
+      "installed": true,
+      "config_path": "/home/you/.claude.json",
+      "scopes": ["user", "project", "effective"],
+      "supports_oauth": false
+    }
+  ],
+  "services": [
+    {
+      "name": "sentry",
+      "description": "Sentry MCP server (OAuth)",
+      "source": "curated",
+      "transport": "http",
+      "auth": "oauth",
+      "install_method": "remote",
+      "env": []
+    }
+  ],
+  "features": [
+    { "name": "registry", "enabled": false, "description": "Official MCP Registry integration" }
+  ]
+}
+```
+
+Common queries with `jq`:
+
+```bash
+# List the slugs of every installed target
+mcp-wire metadata | jq -r '.targets[] | select(.installed) | .slug'
+
+# List curated services that require no credentials
+mcp-wire metadata | jq -r '.services[] | select(.auth == "none") | .name'
+
+# Show the required environment variables for a specific service
+mcp-wire metadata | jq '.services[] | select(.name == "linear") | .env'
+```
+
+Like `doctor`, this command is read-only: it never writes to any config or credential file.
+
 ### Scope-aware installs (Claude Code)
 
 For targets that support scopes (currently Claude Code), you can choose where MCP config is written:
