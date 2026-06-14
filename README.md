@@ -8,6 +8,16 @@ mcp-wire is a Go CLI that installs and configures MCP (Model Context Protocol) s
 
 No manual config editing needed. Run `mcp-wire` to open a full-screen TUI with guided install and uninstall wizards.
 
+### Visual walkthrough
+
+See the TUI in action (recorded from real runs with isolated target configs):
+
+| Install flow | Uninstall flow |
+|--------------|----------------|
+| ![Install flow](docs/assets/install.svg) | ![Uninstall flow](docs/assets/uninstall.svg) |
+
+For a step-by-step breakdown of each screen, see [docs/tui-walkthrough.md](docs/tui-walkthrough.md).
+
 ### Choose a source
 
 Pick from bundled curated services or the community MCP registry:
@@ -235,6 +245,19 @@ cd mcp-wire
 make build
 ./bin/mcp-wire
 ```
+
+## Troubleshooting
+
+See [docs/troubleshooting.md](docs/troubleshooting.md) for solutions to common problems, including:
+
+- Target not detected on your system
+- Empty or stale registry search
+- Credentials prompted every time
+- OAuth follow-up steps after install
+- `--no-prompt` failures
+- Config file safety and scope behavior
+
+Run `mcp-wire doctor` first for a read-only diagnostic report.
 
 ## Contributing
 
