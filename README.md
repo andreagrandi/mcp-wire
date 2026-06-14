@@ -237,6 +237,26 @@ brew tap andreagrandi/tap
 brew install mcp-wire
 ```
 
+### Verify an install
+
+Run the built-in smoke tests to confirm the binary starts and non-mutating commands work. The tests use an isolated temporary `HOME` so they never touch your real MCP config or credentials:
+
+```bash
+make smoke-test
+```
+
+Or point the script at any already-built binary:
+
+```bash
+./scripts/smoke-test-release.sh ./bin/mcp-wire
+```
+
+To also verify a Homebrew-installed copy when `mcp-wire` is present in your Cellar:
+
+```bash
+SMOKE_TEST_HOMEBREW=true ./scripts/smoke-test-release.sh "$(brew --prefix mcp-wire)/bin/mcp-wire"
+```
+
 ### Build from source
 
 ```bash

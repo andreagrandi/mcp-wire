@@ -3,7 +3,9 @@
 ## [Unreleased]
 
 ### Added
-- New `docs/tui-walkthrough.md` with animated SVG recordings of the install and uninstall TUI flows.
+- New `make smoke-test` target and `scripts/smoke-test-release.sh` to verify built release artifacts run `--help`, `--version`, `doctor`, `metadata`, and `feature list` in an isolated `HOME` without writing to user MCP config.
+- Release workflow now runs smoke tests before GoReleaser publishes artifacts.
+- README documents how to verify an install or built binary, including optional Homebrew-installed copy checks.
 - New `docs/troubleshooting.md` covering common setup problems: missing targets, stale registry cache, credential resolution, OAuth follow-up, `--no-prompt` failures, and scope behavior.
 - Recording scripts in `docs/assets/` so TUI visuals can be re-generated from real `mcp-wire` runs.
 - Curated `github`, `notion`, and `linear` services — official OAuth-remote (streamable HTTP) MCP servers that install out of the box.
