@@ -1,0 +1,31 @@
+set timeout 10
+log_user 0
+spawn env MCP_WIRE_REC=1 "$env(MCP_WIRE)"
+expect "Install service"
+log_user 1
+sleep 0.5
+send "\033\[B"
+sleep 0.3
+send "\r"
+expect "Select targets:"
+sleep 0.5
+send " "
+sleep 0.3
+send "\r"
+expect "Search:"
+sleep 0.5
+send "\r"
+expect "Scope"
+sleep 0.5
+send "\r"
+expect "Action:  Uninstall service"
+sleep 0.5
+send "\r"
+expect "removed successfully"
+sleep 1.0
+send "\033\[C"
+sleep 0.2
+send "\033\[C"
+sleep 0.2
+send "\r"
+expect eof

@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- New `docs/tui-walkthrough.md` with animated SVG recordings of the install and uninstall TUI flows.
+- New `docs/troubleshooting.md` covering common setup problems: missing targets, stale registry cache, credential resolution, OAuth follow-up, `--no-prompt` failures, and scope behavior.
+- Recording scripts in `docs/assets/` so TUI visuals can be re-generated from real `mcp-wire` runs.
 - Curated `github`, `notion`, and `linear` services — official OAuth-remote (streamable HTTP) MCP servers that install out of the box.
 - New `mcp-wire doctor` command that prints read-only diagnostics: detected targets and their config paths, feature flag state, mcp-wire config/credentials/services/registry-cache paths, and hints for missing targets or disabled features.
 - New `mcp-wire metadata` command that prints a stable, machine-readable JSON document for automation and AI agents: supported transports and scopes, every target (install status, config path, supported scopes, OAuth support), every service (transport, auth requirement, environment variables), and feature-flag state. Defaults to curated services; use `--source registry` or `--source all` to include registry services.
