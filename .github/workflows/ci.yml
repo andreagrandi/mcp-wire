@@ -89,6 +89,9 @@ jobs:
     - name: Build
       run: make build
 
+    - name: Smoke test built binary
+      run: ./scripts/smoke-test-release.sh ./bin/mcp-wire
+
     - name: Upload build artifact
       uses: actions/upload-artifact@v7
       with:
