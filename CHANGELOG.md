@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## v0.3.0 - 2026-06-14
+
 ### Added
 - New `make smoke-test` target and `scripts/smoke-test-release.sh` to verify built release artifacts run `--help`, `--version`, `doctor`, `metadata`, and `feature list` in an isolated `HOME` without writing to user MCP config.
 - Release workflow now runs smoke tests before GoReleaser publishes artifacts.

@@ -6,7 +6,7 @@ const (
 	License = "MIT"
 )
 
-var Version = "0.2.2"
+var Version = "0.3.0"
 
 type App struct {
 	Name    string
